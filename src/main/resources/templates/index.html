@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>webdb</title>
+  <link href="/webdb/layui/css/layui.css" rel="stylesheet">
+  <style>
+	.layui-card-header {
+	    background-color: #F2F2F2; /* 设置背景颜色 */
+	    color: #333; /* 设置文字颜色 */
+	    font-size: 16px; /* 设置字体大小 */
+	    border-bottom: 1px solid #ddd; /* 设置底部边框 */
+		padding: 7px;
+		padding-right: 10px;
+	}
+
+	td{
+		padding-right: 10px;
+	}
+
+  </style>
+</head>
+<body>
+	<div class="layui-panel layui-card-header" >
+	  <div style="padding: 0px;">
+		 <table style="padding: 0px;">
+			<tr>
+				<td>
+					<a id="fileMenu">文件</a>
+				</td>
+				<td>
+					<a id="editMenu">编辑</a>
+				</td>
+				<td>
+					<a id="queryMenu">查询</a>
+				</td>
+				<td>
+					<a id="toolMenu">工具</a>
+				</td>
+				<td>
+					<a id="helpMenu">帮助</a>
+				</td>				
+			</tr>
+			<tr>
+				<td>
+					<i class="layui-icon layui-icon-add-1"></i> 
+				</td>
+				<td>
+					<i class="layui-icon layui-icon-link"></i> 
+				</td>
+				<td>
+					<i class="layui-icon layui-icon-refresh"></i> 
+				</td>
+				<td>
+					<i class="layui-icon layui-icon-triangle-r"></i> 
+				</td>
+				<td>
+					<i class="layui-icon layui-icon-play"></i> 
+				</td>
+				<td>
+					<i class="layui-icon layui-icon-search"></i> 
+				</td>
+			</tr>
+		 </table>
+	  </div>
+	</div>
+	<div class="layui-row">
+	  <div class="layui-col-xs3">
+			<div id="leftTree"></div>
+	  </div>
+	  <div class="layui-col-xs9">
+		<div class="layui-tabs layui-tabs-card" lay-options="{index: 0}">
+		  <ul class="layui-tabs-header">
+		    <li>数据库名称</li>
+		    <li>数据库</li>
+		    <li><a href="" target="_blank" class="layui-font-blue">跳转项</a></li>
+		    <li class="layui-disabled" lay-unselect>禁选项</li>
+		    <li>标题5</li>
+		    <li>标题6</li>
+		  </ul>
+		  <div class="layui-tabs-body">
+		    <div class="layui-tabs-item">
+				
+			</div>
+		    <div class="layui-tabs-item">
+				
+			</div>
+		    <div class="layui-tabs-item">
+				
+			</div>
+		    <div class="layui-tabs-item">
+				
+			</div>
+		    <div class="layui-tabs-item">
+				
+			</div>
+		    <div class="layui-tabs-item">
+				
+			</div>
+		  </div>
+		</div>
+	  </div>
+	</div>
+</body>	
+  <!-- HTML Content -->
+  <script src="/webdb/layui/layui.js"></script>
+  <script src="/webdb/fileMenu.js"></script>
+  <script src="/webdb/editMenu.js"></script>
+  <script src="/webdb/queryMenu.js"></script>
+  <script src="/webdb/toolMenu.js"></script>
+  <script src="/webdb/helpMenu.js"></script>
+  <script src="/webdb/leftTree.js"></script>
+  <script>
+  // Usage
+    var layer = layui.layer;
+	
+  </script>
+  
+
+</html>

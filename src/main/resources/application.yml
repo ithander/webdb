@@ -1,0 +1,20 @@
+server:
+  port: 9866
+  servlet:
+    context-path: /webdb
+    session:
+      timeout: 600m
+
+logging:
+  level:
+    root: info
+
+spring:
+  application:
+    name: webdb
+  freemarker:
+    template-loader-path: classpath:/templates/
+    suffix: .html
+    charset: UTF-8
+    cache: false
+    content-type: text/html
