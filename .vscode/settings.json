@@ -1,0 +1,19 @@
+{
+    "workbench.colorTheme": "Kiro Light",
+    "workbench.preferredDarkColorTheme": "Kiro Light",
+    "terminal.integrated.detectLocale": "off",
+    "terminal.explorerKind": "both",
+    "terminal.integrated.defaultEncoding": "utf8",
+
+    "terminal.integrated.env.windows": {
+        "JAVA_TOOL_OPTIONS": "-Dfile.encoding=UTF-8"
+    },
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "source": "PowerShell",
+            "args": ["-NoExit", "-Encoding", "UTF8"]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "PowerShell"
+
+}

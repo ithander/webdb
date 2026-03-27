@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebDB - Database Management Tool</title>
+  <link href="/webdb/layui/css/layui.css" rel="stylesheet">
+  <link rel="stylesheet" href="/webdb/zTree/css/metroStyle/metroStyle.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body, html {
+      height: 100%;
+      overflow: hidden;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+    }
+    
+    /* 顶部工具栏 */
+    .toolbar {
+      height: 80px;
+      background: linear-gradient(to bottom, #f8f9fa 0%, #e9ecef 100%);
+      border-bottom: 1px solid #dee2e6;
+      padding: 5px 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .toolbar-menu {
+      display: flex;
+      gap: 15px;
+      padding: 5px 0;
+      border-bottom: 1px solid #dee2e6;
+      margin-bottom: 5px;
+    }
+    
+    .toolbar-menu a {
+      color: #495057;
+      text-decoration: none;
+      padding: 2px 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    
+    .toolbar-menu a:hover {
+      background-color: #e9ecef;
+      border-radius: 3px;
+    }
+    
+    .toolbar-buttons {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    
+    .toolbar-btn {
+      padding: 4px 10px;
+      border: 1px solid #ced4da;
+      background: white;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    
+    .toolbar-btn:hover {
+      background: #f8f9fa;
+      border-color: #adb5bd;
+    }
+    
+    .toolbar-btn.primary {
+      background: #28a745;
+      color: white;
+      border-color: #28a745;
+    }
+    
+    .toolbar-btn.primary:hover {
+      background: #218838;
+    }
+    
+    .toolbar-separator {
+      width: 1px;
+      height: 24px;
+      background: #dee2e6;
+      margin: 0 5px;
+    }
+    
+    /* 主容器 */
+    .main-container {
+      height: calc(100% - 80px);
+      display: flex;
+    }
+    
+    /* 左侧连接面板 */
+    .left-panel {
+      width: 220px;
+      background: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .panel-header {
+      padding: 8px 10px;
+      background: #e9ecef;
+      border-bottom: 1px solid #dee2e6;
+      font-size: 13px;
+      font-weight: bold;
+      color: #495057;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .panel-header-btn {
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 16px;
+      color: #6c757d;
+    }
+    
+    .panel-header-btn:hover {
+      background: #dee2e6;
+    }
+    
+    .tree-container {
+      flex: 1;
+      overflow: auto;
+      padding: 5px;
+    }
+    
+    /* 中间数据库对象面板 */
+    .middle-panel {
+      width: 250px;
+      background: white;
+      border-right: 1px solid #dee2e6;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    /* 右侧工作区 */
+    .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      overflow: hidden;
+    }
+    
+    /* 标签页样式 */
+    .tabs-header {
+      display: flex;
+      background: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+      overflow-x: auto;
+      min-height: 32px;
+    }
+    
+    .tab-item {
+      padding: 6px 15px;
+      border-right: 1px solid #dee2e6;
+      cursor: pointer;
+      font-size: 13px;
+      color: #495057;
+      background: #e9ecef;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .tab-item.active {
+      background: white;
+      color: #007bff;
+      border-bottom: 2px solid #007bff;
+    }
+    
+    .tab-item:hover:not(.active) {
+      background: #dee2e6;
+    }
+    
+    .tab-close {
+      margin-left: 5px;
+      color: #6c757d;
+      font-size: 14px;
+    }
+    
+    .tab-close:hover {
+      color: #dc3545;
+    }
+    
+    .tabs-content {
+      flex: 1;
+      overflow: auto;
+      padding: 10px;
+    }
+    
+    /* zTree 自定义样式 */
+    .ztree {
+      margin: 0;
+      padding: 5px;
+      color: #495057;
+    }
+    
+    .ztree li a {
+      padding: 0 3px;
+      font-size: 13px;
+    }
+    
+    .ztree li a:hover {
+      background-color: #e9ecef;
+      border-radius: 3px;
+    }
+    
+    .ztree li a.curSelectedNode {
+      background-color: #007bff;
+      color: white;
+      border-radius: 3px;
+    }
+    
+    /* zTree 节点图标 */
+    .ztree li span.button.server_ico_open,
+    .ztree li span.button.server_ico_close,
+    .ztree li span.button.server_ico_docu {
+      background: none;
+    }
+    .ztree li span.button.server_ico_open::before,
+    .ztree li span.button.server_ico_close::before,
+    .ztree li span.button.server_ico_docu::before {
+      content: "\e857"; font-family: "layui-icon"; font-size: 16px; color: #5cb85c;
+    }
+    .ztree li span.button.database_ico_open,
+    .ztree li span.button.database_ico_close,
+    .ztree li span.button.database_ico_docu {
+      background: none;
+    }
+    .ztree li span.button.database_ico_open::before,
+    .ztree li span.button.database_ico_close::before,
+    .ztree li span.button.database_ico_docu::before {
+      content: "\e857"; font-family: "layui-icon"; font-size: 16px; color: #337ab7;
+    }
+    .ztree li span.button.table_ico_open,
+    .ztree li span.button.table_ico_close,
+    .ztree li span.button.table_ico_docu {
+      background: none;
+    }
+    .ztree li span.button.table_ico_open::before,
+    .ztree li span.button.table_ico_close::before,
+    .ztree li span.button.table_ico_docu::before {
+      content: "\e62d"; font-family: "layui-icon"; font-size: 16px; color: #f0ad4e;
+    }
+    .ztree li span.button.column_ico_open,
+    .ztree li span.button.column_ico_close,
+    .ztree li span.button.column_ico_docu {
+      background: none;
+    }
+    .ztree li span.button.column_ico_open::before,
+    .ztree li span.button.column_ico_close::before,
+    .ztree li span.button.column_ico_docu::before {
+      content: "\e665"; font-family: "layui-icon"; font-size: 14px; color: #999;
+    }
+    .ztree li span.button.key_ico_open,
+    .ztree li span.button.key_ico_close,
+    .ztree li span.button.key_ico_docu {
+      background: none;
+    }
+    .ztree li span.button.key_ico_open::before,
+    .ztree li span.button.key_ico_close::before,
+    .ztree li span.button.key_ico_docu::before {
+      content: "\e665"; font-family: "layui-icon"; font-size: 14px; color: #e6a23c;
+    }
+    
+    /* 状态栏 */
+    .status-bar {
+      height: 24px;
+      background: #f8f9fa;
+      border-top: 1px solid #dee2e6;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      color: #6c757d;
+      gap: 20px;
+    }
+    
+    /* 分隔条 */
+    .resizer {
+      width: 5px;
+      cursor: col-resize;
+      background: #f8f9fa;
+      position: relative;
+    }
+    
+    .resizer:hover {
+      background: #007bff;
+    }
+    
+    /* 空状态 */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #6c757d;
+      font-size: 14px;
+    }
+    
+    .empty-state i {
+      font-size: 48px;
+      margin-bottom: 10px;
+      color: #adb5bd;
+    }
+    
+    /* SQL 编辑器区域 */
+    .sql-editor {
+      width: 100%;
+      height: 200px;
+      border: 1px solid #dee2e6;
+      border-radius: 3px;
+      padding: 10px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+      resize: vertical;
+    }
+    
+    /* 结果表格容器 - 固定高度，独立滚动 */
+    .query-result-container {
+      margin-top: 20px;
+      max-height: calc(100vh - 450px);
+      overflow: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 3px;
+    }
+    
+    /* 结果表格 */
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    
+    .result-table th {
+      background: #e9ecef;
+      padding: 8px;
+      text-align: left;
+      border: 1px solid #dee2e6;
+      font-weight: 600;
+    }
+    
+    .result-table td {
+      padding: 6px 8px;
+      border: 1px solid #dee2e6;
+    }
+    
+    .result-table tr:hover {
+      background: #f8f9fa;
+    }
+    
+    /* 查询结果容器 - 固定高度，独立滚动 */
+    .query-result-container {
+      height: calc(100% - 80px);
+      overflow: visible;
+      margin-top: 10px;
+      position: relative;
+    }
+    
+    .query-result-container .layui-table-view {
+      margin: 0;
+    }
+    
+    /* 确保分页组件可见 */
+    .query-result-container .layui-table-page {
+      border-top: 1px solid #e6e6e6;
+      background: #fff;
+    }
+
+    <#noparse>
+    /* zTree 节点紧凑布局 */
+    .ztree li { padding: 1px 0 !important; margin: 0 !important; white-space: nowrap; }
+    .ztree li ul { padding-left: 18px; }
+    .ztree li span.button.switch { display: inline-block !important; vertical-align: middle !important; width: 21px !important; height: 21px !important; }
+    .ztree li a { display: inline-block !important; height: 21px !important; line-height: 21px !important; vertical-align: middle !important; }
+    .ztree li a .node_name { vertical-align: middle; }
+    .ztree li span.button.ico_close,
+    .ztree li span.button.ico_open,
+    .ztree li span.button.ico_docu { display: none !important; }
+    .ztree .tree-icon { font-size: 14px; margin-right: 2px; vertical-align: middle; font-style: normal; }
+    .ztree .tree-icon-server { color: #e6a23c; }
+    .ztree .tree-icon-database { color: #409eff; }
+    .ztree .tree-icon-table { color: #67c23a; }
+    .ztree .tree-icon-column { color: #909399; }
+    .ztree .tree-icon-key { color: #e6a23c; }
+    </#noparse>
+  </style>
+  <script src="/webdb/jquery-3.7.1.min.js"></script>
+  <script src="/webdb/zTree/jquery.ztree.all.min.js"></script>
+</head>
+<body>
+  <!-- 顶部工具栏 -->
+  <div class="toolbar">
+    <div class="toolbar-menu">
+      <a id="fileMenu">文件</a>
+      <a id="editMenu">编辑</a>
+      <a id="queryMenu">查询</a>
+      <a id="toolMenu">工具</a>
+      <a id="helpMenu">帮助</a>
+    </div>
+    <div class="toolbar-buttons">
+      <button class="toolbar-btn" onclick="openSessionManager()" title="会话管理">
+        <i class="layui-icon layui-icon-folder-open"></i>
+        <span>会话</span>
+      </button>
+      <button class="toolbar-btn" onclick="connectDatabase()" title="连接数据库">
+        <i class="layui-icon layui-icon-link"></i>
+        <span>连接</span>
+      </button>
+      <button class="toolbar-btn" onclick="refreshTree()" title="刷新">
+        <i class="layui-icon layui-icon-refresh"></i>
+        <span>刷新</span>
+      </button>
+      <div class="toolbar-separator"></div>
+      <button class="toolbar-btn" onclick="newQuery()" title="新建查询">
+        <i class="layui-icon layui-icon-file"></i>
+        <span>新建查询</span>
+      </button>
+      <button class="toolbar-btn primary" onclick="runQuery()" title="执行查询 (F9)">
+        <i class="layui-icon layui-icon-triangle-r"></i>
+        <span>执行</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 主容器 -->
+  <div class="main-container">
+    <!-- 左侧：会话/连接树 -->
+    <div class="left-panel">
+      <div class="panel-header">
+        <span>会话管理器</span>
+        <span class="panel-header-btn" onclick="openSessionManager()" title="管理会话">
+          <i class="layui-icon layui-icon-set"></i>
+        </span>
+      </div>
+      <div class="tree-container">
+        <ul id="sessionTree" class="ztree"></ul>
+      </div>
+    </div>
+
+    <!-- 分隔条 -->
+    <div class="resizer" id="resizer2"></div>
+
+    <!-- 右侧：工作区 -->
+    <div class="right-panel">
+      <div class="tabs-header" id="tabsHeader">
+        <div class="tab-item active" data-tab="structure">
+          <i class="layui-icon layui-icon-template"></i>
+          <span>表结构</span>
+        </div>
+        <div class="tab-item" data-tab="data">
+          <i class="layui-icon layui-icon-table"></i>
+          <span>数据</span>
+        </div>
+        <div class="tab-item" data-tab="query">
+          <i class="layui-icon layui-icon-file"></i>
+          <span>查询</span>
+        </div>
+      </div>
+      <div class="tabs-content" id="tabsContent">
+        <!-- 表结构标签页 -->
+        <div class="tab-content active" data-content="structure">
+          <div id="structureView">
+            <div class="empty-state">
+              <i class="layui-icon layui-icon-template"></i>
+              <p>请从左侧选择一个表查看结构</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 数据标签页 -->
+        <div class="tab-content" data-content="data" style="display: none;">
+          <div id="dataView">
+            <div class="empty-state">
+              <i class="layui-icon layui-icon-table"></i>
+              <p>请从左侧选择一个表查看数据</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 查询标签页 -->
+        <div class="tab-content" data-content="query" style="display: none;">
+          <div id="queryView" style="display:flex;flex-direction:column;height:100%;">
+            <div style="padding:5px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eee;">
+              <span id="queryInfo" style="font-size:12px;color:#999;margin-left:auto;"></span>
+            </div>
+            <div style="padding:5px 8px;">
+              <textarea id="sqlInput" rows="5" placeholder="输入 SQL 查询语句，按 Ctrl+Enter 或点击执行按钮运行" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:Consolas,monospace;font-size:13px;resize:vertical;"></textarea>
+            </div>
+            <div id="queryResult" style="flex:1;overflow:auto;padding:0 8px 8px;">
+              <div class="empty-state" style="padding:30px 0;">
+                <p style="color:#999;">输入 SQL 语句并执行</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="status-bar">
+    <span id="statusText">就绪</span>
+    <span>|</span>
+    <span id="connectionInfo">已连接: ${infos[0].host!""}</span>
+    <span>|</span>
+    <span id="queryTime"></span>
+  </div>
+
+  <!-- 加载 Layui -->
+  <script src="/webdb/layui/layui.js"></script>
+  
+  <!-- 加载菜单脚本 -->
+  <script src="/webdb/fileMenu.js"></script>
+  <script src="/webdb/editMenu.js"></script>
+  <script src="/webdb/queryMenu.js"></script>
+  <script src="/webdb/toolMenu.js"></script>
+  <script src="/webdb/helpMenu.js"></script>
+  
+  
+  <script src="/webdb/session.js?v=${.now?long}"></script>
+
+  <script>
+    // 全局变量
+    var layer = layui.layer;
+    var currentSession = null;
+    var currentTable = null;
+	var infos = eval('${infosJsonStr!}');
+    
+   
+    
+    
+    // 初始化
+    $(document).ready(function() {
+      initSessionTree();
+      initDatabaseTree();
+      initTabs();
+      initResizers();
+      bindKeyboardShortcuts();
+    });
+    
+   
+    
+   
+    
+    // 会话树点击事件 - 由 session.js 中的 onSessionClick 处理
+    // 数据库对象树点击事件
+    function onDbObjectClick(event, treeId, treeNode) {
+      if(treeNode.type === 'table') {
+        currentTable = treeNode.tableName;
+        loadTableData(treeNode.tableName);
+        updateStatus('已选择表: ' + treeNode.tableName);
+      }
+    }
+    
+    // 数据库节点展开事件
+    function onDbNodeExpand(event, treeId, treeNode) {
+      // 可以在这里实现延迟加载
+    }
+    
+    // 初始化标签页
+    function initTabs() {
+      $('.tab-item').click(function() {
+        var tabName = $(this).data('tab');
+        switchTab(tabName);
+      });
+    }
+    
+    // 切换标签页
+    function switchTab(tabName) {
+      $('.tab-item').removeClass('active');
+      $('.tab-item[data-tab="' + tabName + '"]').addClass('active');
+      
+      $('.tab-content').hide();
+      $('.tab-content[data-content="' + tabName + '"]').show();
+    }
+    
+    // 初始化分隔条拖拽
+    function initResizers() {
+      makeResizable($('#resizer2'), $('.left-panel'), 150, 500);
+    }
+    
+    function makeResizable(resizer, panel, minWidth, maxWidth) {
+      var isResizing = false;
+      var lastX = 0;
+      
+      resizer.mousedown(function(e) {
+        isResizing = true;
+        lastX = e.clientX;
+        $('body').css('cursor', 'col-resize');
+        e.preventDefault();
+      });
+      
+      $(document).mousemove(function(e) {
+        if (!isResizing) return;
+        
+        var delta = e.clientX - lastX;
+        var newWidth = panel.width() + delta;
+        
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          panel.width(newWidth);
+          lastX = e.clientX;
+        }
+      });
+      
+      $(document).mouseup(function() {
+        if (isResizing) {
+          isResizing = false;
+          $('body').css('cursor', 'default');
+        }
+      });
+    }
+    
+    // 绑定键盘快捷键
+    function bindKeyboardShortcuts() {
+      $(document).keydown(function(e) {
+        // F9 或 Ctrl+Enter 执行查询
+        if (e.keyCode === 120 || (e.ctrlKey && e.keyCode === 13)) {
+          e.preventDefault();
+          runQuery();
+        }
+        // Ctrl+N 新建查询
+        if (e.ctrlKey && e.keyCode === 78) {
+          e.preventDefault();
+          switchTab('query');
+          $('#sqlInput').focus();
+        }
+      });
+    }
+    
+    // 工具栏函数
+    function openSessionManager() {
+		layer.open({
+		        type: 2,
+		        title: '配置数据源',
+		        shadeClose: true,
+		        maxmin: true, //开启最大化最小化按钮
+		        area: ['900px', '600px'],
+		        content: '/webdb/config'
+		      });
+    }
+    
+    function connectDatabase() {
+      updateStatus('正在连接数据库...');
+      // TODO: 实现连接逻辑
+    }
+    
+    function refreshTree() {
+      var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+      if (!zTree) return;
+      updateStatus('正在刷新...');
+
+      var sessionNodes = zTree.getNodes();
+      var pending = 0;
+
+      sessionNodes.forEach(function(sessionNode) {
+        if (!sessionNode.connected) return;
+        pending++;
+
+        // 记录当前展开的数据库
+        var expandedDbs = [];
+        if (sessionNode.children) {
+          sessionNode.children.forEach(function(dbNode) {
+            if (dbNode.open) expandedDbs.push(dbNode.dbName);
+          });
+          // 删除所有子节点
+          zTree.removeChildNodes(sessionNode);
+        }
+        sessionNode._loaded = false;
+
+        // 重新加载数据库列表
+        $.ajax({
+          url: "/webdb/session/databases",
+          type: "GET",
+          data: { title: sessionNode.title },
+          success: function(result) {
+            if (result.code === 0 && result.data) {
+              var dbDataList = [];
+              result.data.forEach(function(dbName) {
+                nodeIdCounter++;
+                dbDataList.push({
+                  id: nodeIdCounter, pId: sessionNode.id,
+                  name: ICON.database + ' ' + dbName,
+                  isParent: true, title: sessionNode.title,
+                  dbName: dbName, dbtype: sessionNode.dbtype
+                });
+              });
+              zTree.addNodes(sessionNode, dbDataList);
+              sessionNode._loaded = true;
+
+              // 恢复之前展开的数据库
+              if (sessionNode.children && expandedDbs.length > 0) {
+                sessionNode.children.forEach(function(dbNode) {
+                  if (expandedDbs.indexOf(dbNode.dbName) === -1) return;
+                  dbNode._loaded = false;
+                  $.ajax({
+                    url: "/webdb/session/tables",
+                    type: "GET",
+                    data: { title: dbNode.title, dbName: dbNode.dbName },
+                    success: function(tblResult) {
+                      if (tblResult.code === 0 && tblResult.data) {
+                        var tblDataList = [];
+                        tblResult.data.forEach(function(table) {
+                          nodeIdCounter++;
+                          tblDataList.push({
+                            id: nodeIdCounter, pId: dbNode.id,
+                            name: ICON.table + ' ' + table.tableName + ' <span style="color:#999;font-size:11px;">(' + table.total + '行)</span>',
+                            isParent: true, title: dbNode.title,
+                            dbName: dbNode.dbName, tableName: table.tableName,
+                            dbtype: dbNode.dbtype
+                          });
+                        });
+                        zTree.addNodes(dbNode, tblDataList);
+                        dbNode._loaded = true;
+                        zTree.expandNode(dbNode, true, false, false);
+                      }
+                    }
+                  });
+                });
+              }
+            }
+            pending--;
+            if (pending === 0) updateStatus('已刷新');
+          },
+          error: function() {
+            pending--;
+            if (pending === 0) updateStatus('已刷新');
+          }
+        });
+      });
+
+      if (pending === 0) updateStatus('已刷新');
+    }
+    
+    function refreshDbTree() {
+      refreshTree();
+    }
+    
+    var _queryTabCount = 1;
+    
+    function newQuery() {
+      _queryTabCount++;
+      var tabId = 'query-' + _queryTabCount;
+      
+      // 添加 tab 头
+      var tabHtml = '<div class="tab-item" data-tab="' + tabId + '" style="position:relative;">' +
+        '<i class="layui-icon layui-icon-file"></i>' +
+        '<span>查询' + _queryTabCount + '</span>' +
+        '<span class="tab-close" data-close="' + tabId + '" style="margin-left:5px;cursor:pointer;color:#999;font-size:14px;">&times;</span>' +
+        '</div>';
+      $('#tabsHeader').append(tabHtml);
+      
+      // 添加 tab 内容
+      var contentHtml = '<div class="tab-content" data-content="' + tabId + '" style="display:none;">' +
+        '<div id="queryView-' + tabId + '" style="display:flex;flex-direction:column;height:100%;">' +
+          '<div style="padding:5px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eee;">' +
+            '<span id="queryInfo-' + tabId + '" style="font-size:12px;color:#999;margin-left:auto;"></span>' +
+          '</div>' +
+          '<div style="padding:5px 8px;">' +
+            '<textarea class="sqlInput" data-tab="' + tabId + '" rows="5" placeholder="输入 SQL 查询语句，按 Ctrl+Enter 或 F9 执行" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:Consolas,monospace;font-size:13px;resize:vertical;"></textarea>' +
+          '</div>' +
+          '<div class="queryResult" data-tab="' + tabId + '" style="flex:1;overflow:auto;padding:0 8px 8px;">' +
+            '<div class="empty-state" style="padding:30px 0;"><p style="color:#999;">输入 SQL 语句并执行</p></div>' +
+          '</div>' +
+        '</div>' +
+        '</div>';
+      $('#tabsContent').append(contentHtml);
+      
+      // 绑定新 tab 的点击和关闭
+      $('#tabsHeader .tab-item[data-tab="' + tabId + '"]').click(function() {
+        switchTab(tabId);
+      });
+      $('#tabsHeader .tab-close[data-close="' + tabId + '"]').click(function(e) {
+        e.stopPropagation();
+        closeQueryTab(tabId);
+      });
+      
+      // 切换到新 tab
+      switchTab(tabId);
+      $('#tabsContent .sqlInput[data-tab="' + tabId + '"]').focus();
+      updateStatus('新建查询' + _queryTabCount);
+    }
+    
+    function closeQueryTab(tabId) {
+      // 如果关闭的是当前 tab，切换到第一个 tab
+      var $tab = $('#tabsHeader .tab-item[data-tab="' + tabId + '"]');
+      var isActive = $tab.hasClass('active');
+      $tab.remove();
+      $('#tabsContent .tab-content[data-content="' + tabId + '"]').remove();
+      if (isActive) {
+        switchTab('structure');
+      }
+    }
+    
+    function executeQuery() {
+      var sql = $('#sqlEditor').val().trim();
+      if (!sql) {
+        layer.msg('请输入 SQL 语句');
+        return;
+      }
+      
+      // 检查是否有会话信息
+      var sessionTitle ='';
+      if (!sessionTitle) {
+        layer.msg('未连接到数据库');
+        return;
+      }
+      
+      updateStatus('正在执行查询...');
+      var startTime = new Date().getTime();
+      
+      // 判断是查询还是更新语句
+      var sqlUpper = sql.toUpperCase().trim();
+      var isQuery = sqlUpper.startsWith('SELECT') || 
+                    sqlUpper.startsWith('SHOW') || 
+                    sqlUpper.startsWith('DESCRIBE') ||
+                    sqlUpper.startsWith('DESC') ||
+                    sqlUpper.startsWith('EXPLAIN');
+      
+      var apiUrl = isQuery ? '/webdb/db/mysql/executeQuery' : '/webdb/db/mysql/executeUpdate';
+      
+      $.ajax({
+        url: apiUrl,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          title: sessionTitle,
+          sql: sql
+        }),
+        success: function(result) {
+          var endTime = new Date().getTime();
+          var duration = (endTime - startTime) / 1000;
+          
+          if (result.code === 0) {
+            if (isQuery) {
+              // 查询语句 - 显示结果表格
+              renderQueryResult(result.data);
+              $('#queryTime').text('查询耗时: ' + result.data.duration + ' 秒 | 返回 ' + result.data.count + ' 行');
+              updateStatus('查询成功');
+            } else {
+              // 更新语句 - 显示影响行数
+              $('#queryResult').html(
+                '<div style="padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; color: #155724;">' +
+                '<i class="layui-icon layui-icon-ok-circle" style="font-size: 20px;"></i> ' +
+                '<strong>执行成功</strong><br>' +
+                '影响行数: ' + result.data.affectedRows + '<br>' +
+                '耗时: ' + result.data.duration + ' 秒' +
+                '</div>'
+              );
+              $('#queryTime').text('执行耗时: ' + result.data.duration + ' 秒 | 影响 ' + result.data.affectedRows + ' 行');
+              updateStatus('执行成功');
+            }
+          } else {
+            layer.msg(result.msg || '执行失败');
+            $('#queryResult').html(
+              '<div style="padding: 20px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">' +
+              '<i class="layui-icon layui-icon-close-fill" style="font-size: 20px;"></i> ' +
+              '<strong>执行失败</strong><br>' +
+              result.msg +
+              '</div>'
+            );
+            updateStatus('执行失败', 'error');
+          }
+        },
+        error: function(xhr, status, error) {
+          var endTime = new Date().getTime();
+          var duration = (endTime - startTime) / 1000;
+          
+          layer.msg('请求失败: ' + error);
+          $('#queryResult').html(
+            '<div style="padding: 20px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">' +
+            '<i class="layui-icon layui-icon-close-fill" style="font-size: 20px;"></i> ' +
+            '<strong>请求失败</strong><br>' +
+            error +
+            '</div>'
+          );
+          $('#queryTime').text('耗时: ' + duration + ' 秒');
+          updateStatus('请求失败', 'error');
+        }
+      });
+    }
+    
+    // 渲染查询结果表格
+    function renderQueryResult(data) {
+      if (!data || !data.data || data.data.length === 0) {
+        $('#queryResult').html(
+          '<div style="padding: 20px; text-align: center; color: #6c757d; margin-top: 20px;">' +
+          '<i class="layui-icon layui-icon-tips" style="font-size: 48px;"></i><br>' +
+          '查询成功，但没有返回数据' +
+          '</div>'
+        );
+        return;
+      }
+      
+      var rows = data.data;
+      
+      // 获取列名（从第一行数据中提取）
+      var columns = [];
+      if (rows.length > 0) {
+        var firstRow = rows[0];
+        for (var key in firstRow) {
+          if (firstRow.hasOwnProperty(key)) {
+            columns.push({
+              field: key,
+              title: key,
+              minWidth: 120
+            });
+          }
+        }
+      }
+      
+      // 创建带滚动容器的表格
+      $('#queryResult').html(
+        '<div class="query-result-container">' +
+        '<table id="resultTable" lay-filter="resultTable"></table>' +
+        '</div>'
+      );
+      
+      // 计算表格高度（容器高度减去分页栏高度）
+      var containerHeight = $('#queryResult').height() - 80;
+      var tableHeight = containerHeight - 50; // 减去分页组件高度
+      
+      // 使用 Layui Table 渲染
+      layui.use('table', function(){
+        var table = layui.table;
+        
+        table.render({
+          elem: '#resultTable',
+          data: rows,
+          cols: [columns],
+          page: true,
+          limit: 50,
+          limits: [10, 20, 50, 100, 200],
+          skin: 'line',
+          even: true,
+          size: 'sm',
+          height: tableHeight, // 使用计算的高度，表头固定，数据区域可滚动
+          text: {
+            none: '暂无数据'
+          }
+        });
+      });
+    }
+    
+    function clearEditor() {
+      $('#sqlEditor').val('');
+      $('#queryResult').html('');
+      $('#queryTime').text('');
+      updateStatus('已清空');
+    }
+    
+    function openInNewWindow() {
+      window.open(window.location.href, '_blank');
+    }
+    
+    // 加载表数据 - 由 session.js 中的 loadTableData 处理
+    
+    // 更新状态栏
+    function updateStatus(text, type) {
+      $('#statusText').text(text);
+      if (type === 'error') {
+        $('#statusText').css('color', '#dc3545');
+      } else {
+        $('#statusText').css('color', '#495057');
+      }
+    }
+  </script>
+</body>
+</html>

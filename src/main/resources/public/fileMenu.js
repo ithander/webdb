@@ -49,7 +49,23 @@ dropdown.render({
 	}
 	],
 	click: function(obj) {
-		//alert(123);
-		//this.elem.find('span').text(obj.title);
+		switch(obj.id){
+			case 100:{
+				configManager();
+			}break;
+		}
 	}
 });
+
+
+
+function configManager(){
+	layer.open({
+			        type: 2,
+			        title: '会话管理',
+			        shadeClose: true,
+			        maxmin: false, //开启最大化最小化按钮
+			        area: ['600px', '550px'],
+			        content: '/webdb/config'
+			      });
+}

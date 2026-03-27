@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>新增数据库配置</title>
+	<link href="/webdb/layui/css/layui.css" rel="stylesheet">
+</head>
+
+<body>
+	<form class="layui-form" action="" method="post">
+		<input id="id" type="hidden" name="id" value="${info.id!}" />
+		<br/>
+		<div class="layui-form-item">
+			<div class="layui-inline ">
+				<label class="layui-form-label">会话名称</label>
+				<div class="layui-input-inline">
+					<input id="title" type="text" name="title" value="${info.title!}" lay-verify="required"
+						class="layui-input">
+				</div>
+			</div>
+		</div>
+		<div class="layui-form-item">
+					<div class="layui-inline ">
+						<label class="layui-form-label">数据库类型</label>
+						<div class="layui-input-inline">
+							<select id="dbtype" name="dbtype" lay-filter="dbType">
+								<option name="mysql">MySQL</option>
+								<option name="oracle">Oracle</option>
+								<option name="dm">达梦</option>
+								<option name="pg">PostgreSQL</option>
+							</select>
+						</div>
+					</div>
+				</div>
+		<div class="layui-form-item">
+			<label class="layui-form-label">连接信息</label>
+			<div lass="layui-inline ">
+							<div class="layui-input-inline" style="width:100px">
+								<input id="host" type="text" name="host" value="${info.host!}" lay-verify="required"
+									placeholder="主机名/IP" class="layui-input">
+							</div>
+						</div>
+			<div lass="layui-inline " >
+							<div class="layui-input-inline" style="width:100px">
+								<input id="port" type="text" name="port" value="${info.port?string("0")}" lay-verify="required"
+									placeholder="端口" class="layui-input">
+							</div>
+						</div>
+						<div class="layui-inline ">
+										<div class="layui-input-inline" style="width:100px">
+											<input id="dbname" type="text" name="dbname" value="${info.dbname!}" lay-verify="required"
+												placeholder="数据库名" class="layui-input">
+										</div>
+									</div>
+		</div>
+		<div class="layui-form-item">
+			<div class="layui-inline " >
+				<label class="layui-form-label">账号信息</label>
+				<div class="layui-input-inline" style="width:130px">
+					<input id="uname" type="text" name="uname" value="${info.uname!}" lay-verify="required"
+						placeholder="账号" class="layui-input">
+				</div>
+			</div>
+			<div class="layui-inline " >
+				<div class="layui-input-inline" style="width:130px">
+					<input id="upass" type="text" name="upass" value="${info.upass!}" lay-verify="required"
+						placeholder="密码" class="layui-input">
+				</div>
+			</div>
+		</div>
+		<div class="layui-form-item">	
+			<div class="layui-inline ">
+				<label class="layui-form-label">备注</label>
+				<div class="layui-input-inline" style="width:380px;height: 50px;">
+					<textarea id="opt" placeholder="请输入内容" class="layui-textarea" rows="2" cols="90">${info.opt!}</textarea>
+				</div>
+			</div>
+		</div>
+		</div>
+	</form>
+
+</body>
+<script src="/webdb/layui/layui.js"></script>
+<script type="text/javascript" src="/webdb/jquery-3.7.1.min.js"></script>
+<script>
+	var form = layui.form;
+	var dbtype="${info.dbtype!'mysql'}";
+	form.on('select(dbType)', function(data){
+	    var elem = data.elem; // 获得 select 原始 DOM 对象
+	    var value = data.value; // 获得被选中的值
+	    var othis = data.othis; // 获得 select 元素被替换后的 jQuery 对象
+		dbtype=value;
+	});
+	
+	function setupDefaultPort(value){
+		switch(value){
+					case 'mysql':{
+						$('#port').val(3306);
+					};break;
+					case "oracle":{
+						$('#port').val(1521);
+					};break;
+					case "pg":{
+						$('#port').val(5432);
+					};break;
+					case "dm":{
+						$('#port').val(5236);
+					};break;
+				}
+	}
+	  
+	  window.onload=function(){
+		if(!$('#id').val()||$('#id').val()<=0){
+							setupDefaultPort(value);
+						}
+	  }
+	
+	
+	parent.saveForm = function () {
+		var formOK = form.validate('#title') && form.validate('#host') && form.validate('#port') && form.validate('#uname') && form.validate('#upass');
+
+		if (!formOK) {
+			return Promise.resolve({
+				code: 1,
+				msg: "表单验证失败"
+			});
+		}
+
+		return new Promise(function (resolve, reject) {
+			$.post('/webdb/config/form', {
+				id: $('#id').val(),
+				title: $.trim($('#title').val()),
+				host: $.trim($('#host').val()),
+				uname: $.trim($('#uname').val()),
+				upass: $.trim($('#upass').val()),
+				port: $.trim($('#port').val()),
+				dbname: $.trim($('#dbname').val()),
+				dbtype: dbtype,
+				opt: $.trim($('#opt').val())
+			}, function (r) {
+				console.log(r);
+				// 根据返回结果判断
+				resolve(r);
+			}, "JSON").fail(function (xhr, status, error) {
+				resolve({
+					success: false,
+					code: 1,
+					msg: "请求失败: " + error,
+					error: error
+				});
+			});
+		});
+	};
+
+</script>
+
+</html>

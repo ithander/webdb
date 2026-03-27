@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>会话管理器</title>
+  <link href="/webdb/layui/css/layui.css" rel="stylesheet">
+</head>
+<body>
+	<div class="layui-row">
+		<div class="layui-col-xs12">
+				 <div class="layui-panel">
+					         <div class="layui-card-header">
+								<input id="keyword" name="keyword" type="text" value="${keyword!}" placeholder="关键字过虑" class="layui-input" />
+							 </div>
+				 		     <div class="layui-card-body">
+            <div id="configTable"></div>
+			</div>
+			</div>
+	    </div>
+	</div>
+</body>
+
+<script type="text/html" id="opertionAct">
+	<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="connect({{=d.id}})">
+				    <i class="layui-icon layui-icon-link"></i>
+	</button>
+</script>
+
+<script src="/webdb/layui/layui.js"></script>
+<script src="/webdb/jquery-3.7.1.min.js"></script>
+<script>
+	var table = layui.table;
+	table.render({
+	    elem: '#configTable',
+	    url:'/webdb/config/list', // 此处为静态模拟数据，实际使用时需换成真实接口
+	    page: true,
+		toolbar: 'default',
+		height:415,
+	    cols: [[
+		  {field:'id', checkbox:true},
+	      {field:'title', title: '会话名称', sort: true,width:'120'},
+	      {field:'host',  title: '数据库主机地址',width:'160'},
+	      {field:'lastTime', title: '上次连接时间',width:'150'},
+		  {title: '操作',templet:'#opertionAct'},
+	    ]]
+	  });
+	  
+	  
+	  function connect(id){
+		  window.parent.location.href='/webdb/connect?id='+id;
+	  }
+	  
+	  $('#keyword').change(function(){
+		table.reloadData('configTable',{
+			where:{keyword:$.trim($(this).val())}
+		});
+	  })
+	  
+	  
+	  table.on("toolbar(configTable)", function (obj) {
+	  		  			          if (obj.event === "add") {
+	  		  						 addConf();
+	  		  					  }
+	  		  					  if (obj.event === "update") {
+	  		  						     let selectedData=table.checkStatus('configTable').data;
+	  		  								   if(!selectedData||0==selectedData.length){
+	  		  									   layer.alert('请选中要修改的记录');
+	  		  									   return;
+	  		  									}
+	  		  							upConf(selectedData[0].id);
+	  		  					  }
+	  		  					  if (obj.event === "delete") {
+	  		  					  	  delConf();
+	  		  					  }
+	  		  			});
+
+	  		  		
+	  		  	   function addConf(){
+	  		  		    layer.open({
+	  		  		        type: 2,
+	  		  		        title: "新增数据库配置",
+	  		  		        area: ['550px', '480px'],
+	  		  		        btn: ['取消',  '保存'],
+	  		  		        shadeClose: false,
+	  		  				content: '/webdb/config/form',
+	  		  				btn1: function(index, layero, that){
+	  		  					layer.close(index);
+	  		  				},
+	  		  				btn2: function(index, layero, that){
+	  		  					//alert(that);
+	  		  					window.saveForm().then(function(result) {
+	  		  					    if (0===result.code) {
+	  		  							layer.close(index)
+	  		  							table.reloadData('configTable');
+	  		  					    } else {
+	  		  							layer.alert(result.msg);
+	  		  					    }
+	  		  					});
+	  		  					return false;
+	  		  				},
+	  		  		        
+	  		  		      });
+	  		  	   }//add user end
+	  		  	   
+	  		  	   
+	  		  	   function upConf(id){
+	  		  	   	    layer.open({
+	  		  	   	        type: 2,
+	  		  	   	        title: "修改数据库配置",
+	  		  	   	        area: ['550px', '480px'],
+	  		  	   	        btn: ['取消',  '保存'],
+	  		  	   	        shadeClose: false,
+	  		  	   			content: '/webdb/config/form?id='+id,
+	  		  	   			btn1: function(index, layero, that){
+	  		  	   				layer.close(index);
+	  		  	   			},
+	  		  	   			btn2: function(index, layero, that){
+	  		  	   				//alert(that);
+	  		  	   				window.saveForm().then(function(result) {
+	  		  	   				    if (0===result.code) {
+	  		  	   						layer.close(index)
+	  		  	   						table.reloadData('configTable');
+	  		  	   				    } else {
+	  		  	   						layer.alert(result.msg);
+	  		  	   				    }
+	  		  	   				});
+	  		  	   				return false;
+	  		  	   			},
+	  		  	   	        
+	  		  	   	      });
+	  		  	      }//update user end
+	  		  	   
+	  		  	   function delConf(){
+	  		  		   let selectedData=table.checkStatus('configTable').data;
+	  		  		   if(!selectedData||0==selectedData.length){
+	  		  			   layer.alert('请选中要删除的记录');
+	  		  			   return;
+	  		  		   }
+	  		  		   layer.confirm('确定要删除吗？',function(r){
+	  		  			   if(r){
+	  		  				   var ids=[];
+	  		  				   selectedData.forEach(function(item,index,arr){
+	  		  					    ids.push(item.id);
+	  		  						$.post('/webdb/config/del',{ids:ids.join(',')},function(r){
+	  		  							if(0!=r.code){
+	  		  								layer.alert(r.msg);
+	  		  							}else{
+	  		  								layer.closeLast('dialog');
+	  		  								table.reloadData('configTable');
+	  		  							}
+	  		  						})
+	  		  				   });
+	  		  			   }
+	  		  		   })
+	  		  	   }
+	  
+</script>
+</html>
