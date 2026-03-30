@@ -65,7 +65,7 @@
 			</div>
 			<div class="layui-inline " >
 				<div class="layui-input-inline" style="width:130px">
-					<input id="upass" type="text" name="upass" value="${info.upass!}" lay-verify="required"
+					<input id="upass" type="password" name="upass" value="${info.upass!}" lay-verify="required"
 						placeholder="密码" class="layui-input">
 				</div>
 			</div>
@@ -142,7 +142,7 @@
 		};
 
 		// 存到 localStorage
-		var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+		var configs = parent.WebdbCrypto ? parent.WebdbCrypto.loadConfigs() : JSON.parse(localStorage.getItem('webdb_configs') || '[]');
 		var existIdx = -1;
 		configs.forEach(function(c, i) { if (c.title === cfg.title) existIdx = i; });
 		if (existIdx >= 0) {
@@ -150,7 +150,11 @@
 		} else {
 			configs.push(cfg);
 		}
-		localStorage.setItem('webdb_configs', JSON.stringify(configs));
+		if (parent.WebdbCrypto) {
+			parent.WebdbCrypto.saveConfigs(configs);
+		} else {
+			localStorage.setItem('webdb_configs', JSON.stringify(configs));
+		}
 
 		// 同步到后端
 		return new Promise(function (resolve) {

@@ -92,7 +92,7 @@ function configManager(){
 		area: ['650px', '400px'],
 		content: buildConfigListHtml(),
 		end: function() {
-			infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+			infos = WebdbCrypto.loadConfigs();
 			var zTree = $.fn.zTree.getZTreeObj("sessionTree");
 			if (zTree) zTree.destroy();
 			initSessionTree();
@@ -103,7 +103,7 @@ function configManager(){
 }
 
 function buildConfigListHtml() {
-	var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+	var configs = WebdbCrypto.loadConfigs();
 	var html = '<div style="padding:15px;">';
 	if (configs.length > 0) {
 		html += '<table class="layui-table" lay-size="sm">';
@@ -130,9 +130,9 @@ function buildConfigListHtml() {
 function deleteConfigByIdx(idx) {
 	layer.confirm('确定删除该会话？', function(confirmIdx) {
 		layer.close(confirmIdx);
-		var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+		var configs = WebdbCrypto.loadConfigs();
 		var removed = configs.splice(idx, 1)[0];
-		localStorage.setItem('webdb_configs', JSON.stringify(configs));
+		WebdbCrypto.saveConfigs(configs);
 		if (removed) {
 			$.ajax({ url: '/webdb/config/del', type: 'POST', contentType: 'application/json', data: JSON.stringify({ title: removed.title }) });
 		}
@@ -179,7 +179,7 @@ function saveSqlFile() {
 }
 
 function exportConfig() {
-	var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+	var configs = WebdbCrypto.loadConfigs();
 	if (configs.length === 0) {
 		layer.msg('暂无配置可导出');
 		return;
@@ -211,7 +211,7 @@ function importConfig() {
 							layer.msg('文件格式错误');
 							return;
 						}
-						var existing = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+						var existing = WebdbCrypto.loadConfigs();
 						var added = 0;
 						imported.forEach(function(cfg) {
 							if (cfg.title && !existing.some(function(c) { return c.title === cfg.title; })) {
@@ -219,7 +219,7 @@ function importConfig() {
 								added++;
 							}
 						});
-						localStorage.setItem('webdb_configs', JSON.stringify(existing));
+						WebdbCrypto.saveConfigs(existing);
 						layer.closeAll();
 						layer.msg('导入成功，新增 ' + added + ' 条配置');
 						// 刷新树

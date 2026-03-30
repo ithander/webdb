@@ -536,6 +536,7 @@
   <script src="/webdb/helpMenu.js"></script>
   
   
+  <script src="/webdb/crypto.js?v=${.now?long}"></script>
   <script src="/webdb/session.js?v=${.now?long}"></script>
 
   <script>
@@ -543,7 +544,7 @@
     var layer = layui.layer;
     var currentSession = null;
     var currentTable = null;
-	var infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+	var infos = WebdbCrypto.loadConfigs();
 	// 启动时同步配置到后端内存
 	if (infos.length > 0) {
 	    $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
@@ -673,7 +674,7 @@
                             layer.close(index);
                             layer.msg('保存成功');
                             // 刷新树
-                            infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+                            infos = WebdbCrypto.loadConfigs();
                             var zTree = $.fn.zTree.getZTreeObj("sessionTree");
                             if (zTree) zTree.destroy();
                             initSessionTree();
@@ -687,9 +688,9 @@
     }
 
     function deleteConfig(idx) {
-        var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+        var configs = WebdbCrypto.loadConfigs();
         var removed = configs.splice(idx, 1)[0];
-        localStorage.setItem('webdb_configs', JSON.stringify(configs));
+        WebdbCrypto.saveConfigs(configs);
         if (removed) {
             $.ajax({ url: '/webdb/config/del', type: 'POST', contentType: 'application/json', data: JSON.stringify({ title: removed.title }) });
         }
