@@ -1,16 +1,11 @@
 package org.ithang.tools.model;
 
-import org.ithang.meta.ID;
-import org.ithang.meta.Table;
-
 import lombok.Data;
 
 @Data
-@Table("db_config")
 public class DBInfo {
 
-	@ID
-	private int id;
+	private long id;
 	private String title;
 	private String host;
 	private String uname;

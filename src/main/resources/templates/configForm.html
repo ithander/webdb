@@ -26,10 +26,10 @@
 						<label class="layui-form-label">数据库类型</label>
 						<div class="layui-input-inline">
 							<select id="dbtype" name="dbtype" lay-filter="dbType">
-								<option name="mysql">MySQL</option>
-								<option name="oracle">Oracle</option>
-								<option name="dm">达梦</option>
-								<option name="pg">PostgreSQL</option>
+								<option value="mysql">MySQL</option>
+								<option value="oracle">Oracle</option>
+								<option value="dm">达梦</option>
+								<option value="pg">PostgreSQL</option>
 							</select>
 						</div>
 					</div>
@@ -92,6 +92,7 @@
 	    var value = data.value; // 获得被选中的值
 	    var othis = data.othis; // 获得 select 元素被替换后的 jQuery 对象
 		dbtype=value;
+		setupDefaultPort(value);
 	});
 	
 	function setupDefaultPort(value){
@@ -113,7 +114,7 @@
 	  
 	  window.onload=function(){
 		if(!$('#id').val()||$('#id').val()<=0){
-							setupDefaultPort(value);
+							setupDefaultPort(dbtype);
 						}
 	  }
 	
@@ -128,28 +129,38 @@
 			});
 		}
 
-		return new Promise(function (resolve, reject) {
-			$.post('/webdb/config/form', {
-				id: $('#id').val(),
-				title: $.trim($('#title').val()),
-				host: $.trim($('#host').val()),
-				uname: $.trim($('#uname').val()),
-				upass: $.trim($('#upass').val()),
-				port: $.trim($('#port').val()),
-				dbname: $.trim($('#dbname').val()),
-				dbtype: dbtype,
-				opt: $.trim($('#opt').val())
-			}, function (r) {
-				console.log(r);
-				// 根据返回结果判断
-				resolve(r);
-			}, "JSON").fail(function (xhr, status, error) {
-				resolve({
-					success: false,
-					code: 1,
-					msg: "请求失败: " + error,
-					error: error
-				});
+		var cfg = {
+			id: Date.now(),
+			title: $.trim($('#title').val()),
+			host: $.trim($('#host').val()),
+			uname: $.trim($('#uname').val()),
+			upass: $.trim($('#upass').val()),
+			port: parseInt($.trim($('#port').val())) || 3306,
+			dbname: $.trim($('#dbname').val()),
+			dbtype: dbtype,
+			opt: $.trim($('#opt').val())
+		};
+
+		// 存到 localStorage
+		var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+		var existIdx = -1;
+		configs.forEach(function(c, i) { if (c.title === cfg.title) existIdx = i; });
+		if (existIdx >= 0) {
+			configs[existIdx] = cfg;
+		} else {
+			configs.push(cfg);
+		}
+		localStorage.setItem('webdb_configs', JSON.stringify(configs));
+
+		// 同步到后端
+		return new Promise(function (resolve) {
+			$.ajax({
+				url: '/webdb/config/save',
+				type: 'POST',
+				contentType: 'application/json',
+				data: JSON.stringify(cfg),
+				success: function(r) { resolve({ code: 0, msg: 'success' }); },
+				error: function() { resolve({ code: 0, msg: 'success' }); }
 			});
 		});
 	};

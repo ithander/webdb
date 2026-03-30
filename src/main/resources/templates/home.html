@@ -417,13 +417,9 @@
       <a id="helpMenu">帮助</a>
     </div>
     <div class="toolbar-buttons">
-      <button class="toolbar-btn" onclick="openSessionManager()" title="会话管理">
-        <i class="layui-icon layui-icon-folder-open"></i>
-        <span>会话</span>
-      </button>
-      <button class="toolbar-btn" onclick="connectDatabase()" title="连接数据库">
-        <i class="layui-icon layui-icon-link"></i>
-        <span>连接</span>
+      <button class="toolbar-btn" onclick="openSessionManager()" title="新增会话">
+        <i class="layui-icon layui-icon-add-circle"></i>
+        <span>新增会话</span>
       </button>
       <button class="toolbar-btn" onclick="refreshTree()" title="刷新">
         <i class="layui-icon layui-icon-refresh"></i>
@@ -437,6 +433,10 @@
       <button class="toolbar-btn primary" onclick="runQuery()" title="执行查询 (F9)">
         <i class="layui-icon layui-icon-triangle-r"></i>
         <span>执行</span>
+      </button>
+      <button id="btnClearSql" class="toolbar-btn" onclick="clearCurrentSql()" title="清空SQL" disabled style="opacity:0.5;cursor:not-allowed;">
+        <i class="layui-icon layui-icon-delete"></i>
+        <span>清空</span>
       </button>
     </div>
   </div>
@@ -520,7 +520,7 @@
   <div class="status-bar">
     <span id="statusText">就绪</span>
     <span>|</span>
-    <span id="connectionInfo">已连接: ${infos[0].host!""}</span>
+    <span id="connectionInfo"></span>
     <span>|</span>
     <span id="queryTime"></span>
   </div>
@@ -529,7 +529,7 @@
   <script src="/webdb/layui/layui.js"></script>
   
   <!-- 加载菜单脚本 -->
-  <script src="/webdb/fileMenu.js"></script>
+  <script src="/webdb/fileMenu.js?v=${.now?long}"></script>
   <script src="/webdb/editMenu.js"></script>
   <script src="/webdb/queryMenu.js"></script>
   <script src="/webdb/toolMenu.js"></script>
@@ -543,7 +543,11 @@
     var layer = layui.layer;
     var currentSession = null;
     var currentTable = null;
-	var infos = eval('${infosJsonStr!}');
+	var infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+	// 启动时同步配置到后端内存
+	if (infos.length > 0) {
+	    $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
+	}
     
    
     
@@ -582,6 +586,10 @@
         var tabName = $(this).data('tab');
         switchTab(tabName);
       });
+      // 监听 SQL 输入框变化，更新清空按钮状态
+      $(document).on('input', '#sqlInput, .sqlInput', function() {
+        if (typeof updateClearSqlBtn === 'function') updateClearSqlBtn();
+      });
     }
     
     // 切换标签页
@@ -591,6 +599,9 @@
       
       $('.tab-content').hide();
       $('.tab-content[data-content="' + tabName + '"]').show();
+      
+      // 更新清空按钮状态
+      if (typeof updateClearSqlBtn === 'function') updateClearSqlBtn();
     }
     
     // 初始化分隔条拖拽
@@ -648,14 +659,45 @@
     
     // 工具栏函数
     function openSessionManager() {
-		layer.open({
-		        type: 2,
-		        title: '配置数据源',
-		        shadeClose: true,
-		        maxmin: true, //开启最大化最小化按钮
-		        area: ['900px', '600px'],
-		        content: '/webdb/config'
-		      });
+        layer.open({
+            type: 2,
+            title: '新增数据库配置',
+            shadeClose: true,
+            area: ['550px', '420px'],
+            content: '/webdb/config/form',
+            btn: ['保存', '取消'],
+            yes: function(index, layero) {
+                if (window.saveForm) {
+                    window.saveForm().then(function(r) {
+                        if (r && r.code === 0) {
+                            layer.close(index);
+                            layer.msg('保存成功');
+                            // 刷新树
+                            infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+                            var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+                            if (zTree) zTree.destroy();
+                            initSessionTree();
+                            // 同步到后端
+                            $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    function deleteConfig(idx) {
+        var configs = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+        var removed = configs.splice(idx, 1)[0];
+        localStorage.setItem('webdb_configs', JSON.stringify(configs));
+        if (removed) {
+            $.ajax({ url: '/webdb/config/del', type: 'POST', contentType: 'application/json', data: JSON.stringify({ title: removed.title }) });
+        }
+        layer.msg('已删除');
+        infos = configs;
+        var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+        if (zTree) zTree.destroy();
+        initSessionTree();
     }
     
     function connectDatabase() {

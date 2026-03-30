@@ -2,16 +2,7 @@ var dropdown = layui.dropdown;
 // 渲染
 dropdown.render({
 	elem: '#queryMenu', // 绑定元素选择器，此处指向 class 可同时绑定多个元素
-	data: [{
-		title: '新建查询标签',
-		id: 300
-	}, {
-		title: '关闭查询标签',
-		id: 301
-	}, {
-		title: '重名名查询标签',
-		id: 302
-	}, {
+	data: [ {
 		title: '清除',
 		id: 303
 	},

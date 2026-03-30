@@ -57,6 +57,10 @@ function initSessionTree() {
 
 // 节点双击事件
 function onSessionDblClick(event, treeId, treeNode) {
+    if (treeNode.level === 0) {
+        editSession(treeNode.title);
+        return;
+    }
     onSessionClick(event, treeId, treeNode);
 }
 
@@ -65,11 +69,6 @@ function onSessionClick(event, treeId, treeNode) {
     var zTree = $.fn.zTree.getZTreeObj(treeId);
 
     if (treeNode.level === 0) {
-        if (!treeNode.connected) {
-            connectSession(treeNode);
-        } else {
-            zTree.expandNode(treeNode, true, false, true);
-        }
         return;
     }
 
@@ -682,6 +681,66 @@ function clearQuery() {
     $('#sqlInput').val('');
     $('#queryResult').html('<div class="empty-state" style="padding:30px 0;"><p style="color:#999;">输入 SQL 语句并执行</p></div>');
     $('#queryInfo').text('');
+    updateClearSqlBtn();
+}
+
+// 清空当前活跃查询 tab 的 SQL
+function clearCurrentSql() {
+    var activeTab = $('.tab-item.active').data('tab');
+    if (activeTab === 'query') {
+        $('#sqlInput').val('');
+        $('#queryResult').html('<div class="empty-state" style="padding:30px 0;"><p style="color:#999;">输入 SQL 语句并执行</p></div>');
+        $('#queryInfo').text('');
+    } else if (activeTab && String(activeTab).startsWith('query-')) {
+        $('.sqlInput[data-tab="' + activeTab + '"]').val('');
+        $('.queryResult[data-tab="' + activeTab + '"]').html('<div class="empty-state" style="padding:30px 0;"><p style="color:#999;">输入 SQL 语句并执行</p></div>');
+        $('#queryInfo-' + activeTab).text('');
+    }
+    updateClearSqlBtn();
+}
+
+// 更新清空按钮的启用/禁用状态
+function updateClearSqlBtn() {
+    var btn = document.getElementById('btnClearSql');
+    if (!btn) return;
+    var activeTab = $('.tab-item.active').data('tab');
+    var hasSql = false;
+    if (activeTab === 'query') {
+        hasSql = $('#sqlInput').val().trim().length > 0;
+    } else if (activeTab && String(activeTab).startsWith('query-')) {
+        hasSql = $('.sqlInput[data-tab="' + activeTab + '"]').val().trim().length > 0;
+    }
+    var enabled = hasSql;
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.5';
+    btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+}
+
+// 编辑会话配置
+function editSession(title) {
+    layer.open({
+        type: 2,
+        title: '编辑会话 - ' + title,
+        shadeClose: true,
+        area: ['550px', '420px'],
+        content: '/webdb/config/form?title=' + encodeURIComponent(title),
+        btn: ['保存', '取消'],
+        yes: function(index, layero) {
+            if (window.saveForm) {
+                window.saveForm().then(function(r) {
+                    if (r && r.code === 0) {
+                        layer.close(index);
+                        layer.msg('保存成功');
+                        infos = JSON.parse(localStorage.getItem('webdb_configs') || '[]');
+                        var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+                        if (zTree) zTree.destroy();
+                        initSessionTree();
+                        $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
+                    }
+                });
+            }
+        }
+    });
 }
 
 // 初始化数据库对象树（保留兼容）

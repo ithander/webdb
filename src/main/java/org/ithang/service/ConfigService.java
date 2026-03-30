@@ -1,60 +1,51 @@
 package org.ithang.service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.ithang.ModelDao;
 import org.ithang.tools.model.DBInfo;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
-public class ConfigService extends ModelDao<DBInfo>{
+public class ConfigService {
 
-	public ConfigService(JdbcTemplate jdbcTemplate) {
-		super(jdbcTemplate);
-		initConfigTable();
-	}
-	
-	public void initConfigTable() {
-		String createTableSql = 
-                "CREATE TABLE IF NOT EXISTS db_config (" +
-		        "  id INT NOT NULL PRIMARY KEY,"+
-                "  title VARCHAR(255) NOT NULL UNIQUE," +
-                "  host VARCHAR(255) NOT NULL," +
-                "  uname VARCHAR(255) NOT NULL," +
-                "  upass VARCHAR(255) NOT NULL," +
-                "  port INT NOT NULL," +
-                "  dbname VARCHAR(255) NOT NULL," +
-                "  dbtype VARCHAR(50) NOT NULL," +
-                "  user_id VARCHAR(100)," +
-                "  last_time VARCHAR(20)," +
-                "  opt VARCHAR(200) " +
-                ")";
-        List<String> tables=listsColumn("select table_name from information_schema.tables where  table_schema='PUBLIC'",String.class);
-        if(tables != null && (tables.contains("db_config")||tables.contains("DB_CONFIG "))) {
-        	log.info("不用初始化db_config");
-        }else {
-        	updatesSQL(createTableSql);
+    // 内存缓存，由前端 localStorage 同步过来
+    private final ConcurrentHashMap<String, DBInfo> configMap = new ConcurrentHashMap<>();
+
+    public List<DBInfo> listAll() {
+        return new ArrayList<>(configMap.values());
+    }
+
+    public DBInfo getInfoByTitle(String title) {
+        return configMap.get(title);
+    }
+
+    public void save(DBInfo info) {
+        configMap.put(info.getTitle(), info);
+        log.info("保存配置: {}", info.getTitle());
+    }
+
+    public void delete(String title) {
+        configMap.remove(title);
+        log.info("删除配置: {}", title);
+    }
+
+    public boolean hasInfo(String title) {
+        return configMap.containsKey(title);
+    }
+
+    /**
+     * 批量同步前端 localStorage 的配置到内存
+     */
+    public void syncAll(List<DBInfo> infos) {
+        configMap.clear();
+        if (infos != null) {
+            infos.forEach(info -> configMap.put(info.getTitle(), info));
         }
-	}
-	
-	public int getMaxId() {
-		return getsInt("select max(id) from db_config");
-	}
-	
-	public DBInfo getInfoByTitle(String title) {
-		return getsBean("select * from db_config where title=?",title);
-	}
-	
-	public boolean hasInfo(String title) {
-		return getsColumn("select count(0) from db_config where title='"+title+"'",Integer.class)>0;
-	}
-	
-	public void dropTable(String tableName) {
-		updatesSQL("drop table "+tableName);
-	}
-
+        log.info("同步配置: {} 条", configMap.size());
+    }
 }

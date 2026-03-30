@@ -12,11 +12,6 @@ logging:
 spring:
   application:
     name: webdb
-  datasource:
-    url: jdbc:h2:file:./webdb/config
-    driverClassName: org.h2.Driver
-    username: sa
-    password:
   freemarker:
     number-format: '#'
     template-loader-path: classpath:/templates/
@@ -24,9 +19,3 @@ spring:
     charset: UTF-8
     cache: false
     content-type: text/html
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-      settings:
-        web-allow-others: true
