@@ -32,11 +32,22 @@ public class DbHandlerFactory {
 		DbHandler handler=null;
 		if(handlerMap.containsKey(title)) {
 			handler=handlerMap.get(title);
-		}else {
-			DBInfo dbInfo=configService.getInfoByTitle(title);//获取数据库配置信息
-			handler=createHandler(dbInfo);
-			handlerMap.put(title, handler);
-			infos.add(dbInfo);
+			// 检查连接池是否已关闭，如果关闭则重新创建
+			if(handler != null && handler.getDataSource() instanceof com.zaxxer.hikari.HikariDataSource) {
+				com.zaxxer.hikari.HikariDataSource ds = (com.zaxxer.hikari.HikariDataSource) handler.getDataSource();
+				if(ds.isClosed()) {
+					handlerMap.remove(title);
+					serviceMap.remove(title);
+					handler = null;
+				}
+			}
+		}
+		if(handler == null) {
+			DBInfo dbInfo=configService.getInfoByTitle(title);
+			if(dbInfo != null) {
+				handler=createHandler(dbInfo);
+				handlerMap.put(title, handler);
+			}
 		}
 		return handler;
 	}
@@ -79,6 +90,7 @@ public class DbHandlerFactory {
 			}
 			handlerMap.remove(title);
 		}
+		serviceMap.remove(title);
 	}
 	
 	
