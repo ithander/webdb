@@ -12,6 +12,7 @@ import org.ithang.handler.DbHandler;
 import org.ithang.handler.DbHandlerFactory;
 import org.ithang.model.ColumnInfo;
 import org.ithang.service.ConfigService;
+import org.ithang.service.DbService;
 import org.ithang.service.MySQLDbService;
 import org.ithang.model.TableInfo;
 import org.ithang.tools.model.DBInfo;
@@ -78,11 +79,38 @@ public class SessionAction extends DbAction {
             if (handler == null) {
                 return fail("未找到会话: " + title);
             }
-            List<Map<String, Object>> dbs = handler.getJdbcTemplate().queryForList("SHOW DATABASES");
+            DBInfo info = configService.getInfoByTitle(title);
+            String dbtype = info != null ? info.getDbtype() : "mysql";
+
             List<String> dbNames = new ArrayList<>();
-            for (Map<String, Object> db : dbs) {
-                for (Object val : db.values()) {
-                    dbNames.add(val.toString());
+            if ("dm".equals(dbtype)) {
+                // 达梦：查询所有 schema
+                List<Map<String, Object>> schemas = handler.getJdbcTemplate().queryForList(
+                    "SELECT DISTINCT OWNER FROM ALL_TABLES ORDER BY OWNER");
+                for (Map<String, Object> s : schemas) {
+                    dbNames.add(s.values().iterator().next().toString());
+                }
+            } else if ("oracle".equals(dbtype)) {
+                // Oracle：查询所有 schema
+                List<Map<String, Object>> schemas = handler.getJdbcTemplate().queryForList(
+                    "SELECT DISTINCT OWNER FROM ALL_TABLES ORDER BY OWNER");
+                for (Map<String, Object> s : schemas) {
+                    dbNames.add(s.values().iterator().next().toString());
+                }
+            } else if ("pg".equals(dbtype)) {
+                // PostgreSQL：查询所有 schema
+                List<Map<String, Object>> schemas = handler.getJdbcTemplate().queryForList(
+                    "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY schema_name");
+                for (Map<String, Object> s : schemas) {
+                    dbNames.add(s.values().iterator().next().toString());
+                }
+            } else {
+                // MySQL/MariaDB
+                List<Map<String, Object>> dbs = handler.getJdbcTemplate().queryForList("SHOW DATABASES");
+                for (Map<String, Object> db : dbs) {
+                    for (Object val : db.values()) {
+                        dbNames.add(val.toString());
+                    }
                 }
             }
             return success(0, dbNames);
@@ -103,15 +131,15 @@ public class SessionAction extends DbAction {
             return fail("会话标题不能为空");
         }
         try {
-            MySQLDbService mysqlService = handlerFactory.getMySQLService(title);
-            if (mysqlService == null) {
+            DbService dbService = handlerFactory.getDbService(title);
+            if (dbService == null) {
                 return fail("未找到会话: " + title);
             }
             List<TableInfo> tableInfos;
             if (StrUtil.isNotBlank(dbName)) {
-                tableInfos = mysqlService.tables(dbName);
+                tableInfos = dbService.tables(dbName);
             } else {
-                tableInfos = mysqlService.tables();
+                tableInfos = dbService.tables();
             }
             return success(0, tableInfos);
         } catch (Exception e) {
@@ -136,23 +164,145 @@ public class SessionAction extends DbAction {
             if (handler == null) {
                 return fail("未找到会话: " + title);
             }
-            String sql = "SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT " +
-                         "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
-                         "ORDER BY ORDINAL_POSITION";
-            List<Map<String, Object>> rows = handler.getJdbcTemplate().queryForList(sql, dbName, tableName);
+            DBInfo info = configService.getInfoByTitle(title);
+            String dbtype = info != null ? info.getDbtype() : "mysql";
 
             List<ColumnInfo> columns = new ArrayList<>();
-            for (Map<String, Object> row : rows) {
-                ColumnInfo col = new ColumnInfo();
-                col.setColunmName(String.valueOf(row.get("COLUMN_NAME")));
-                col.setColumnType(String.valueOf(row.get("COLUMN_TYPE")));
-                col.setPrimaryKey("PRI".equals(String.valueOf(row.get("COLUMN_KEY"))));
-                col.setUnique("UNI".equals(String.valueOf(row.get("COLUMN_KEY"))));
-                col.setNullable("YES".equals(String.valueOf(row.get("IS_NULLABLE"))));
-                Object defVal = row.get("COLUMN_DEFAULT");
-                col.setDefaultValue(defVal != null ? String.valueOf(defVal) : "");
-                col.setOpt(String.valueOf(row.getOrDefault("COLUMN_COMMENT", "")));
-                columns.add(col);
+
+            if ("dm".equals(dbtype)) {
+                // 达梦字段查询
+                String sql = "SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE, DATA_DEFAULT " +
+                             "FROM ALL_TAB_COLUMNS WHERE OWNER = ? AND TABLE_NAME = ? " +
+                             "ORDER BY COLUMN_ID";
+                List<Map<String, Object>> rows = handler.getJdbcTemplate().queryForList(sql, dbName.toUpperCase(), tableName.toUpperCase());
+                String pkSql = "SELECT COLUMN_NAME FROM ALL_CONS_COLUMNS ACC " +
+                               "JOIN ALL_CONSTRAINTS AC ON ACC.CONSTRAINT_NAME = AC.CONSTRAINT_NAME AND ACC.OWNER = AC.OWNER " +
+                               "WHERE AC.CONSTRAINT_TYPE = 'P' AND AC.OWNER = ? AND AC.TABLE_NAME = ?";
+                List<String> pkCols = handler.getJdbcTemplate().queryForList(pkSql, String.class, dbName.toUpperCase(), tableName.toUpperCase());
+
+                for (Map<String, Object> row : rows) {
+                    ColumnInfo col = new ColumnInfo();
+                    String colName = String.valueOf(row.get("COLUMN_NAME"));
+                    String dataType = String.valueOf(row.get("DATA_TYPE"));
+                    Object dataLen = row.get("DATA_LENGTH");
+                    col.setColunmName(colName);
+                    col.setColumnType(dataLen != null ? dataType + "(" + dataLen + ")" : dataType);
+                    col.setPrimaryKey(pkCols.contains(colName));
+                    col.setNullable("Y".equals(String.valueOf(row.get("NULLABLE"))));
+                    Object defVal = row.get("DATA_DEFAULT");
+                    col.setDefaultValue(defVal != null ? String.valueOf(defVal).trim() : "");
+                    col.setOpt("");
+                    columns.add(col);
+                }
+            } else if ("oracle".equals(dbtype)) {
+                // Oracle 字段查询
+                String sql = "SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE, NULLABLE, DATA_DEFAULT " +
+                             "FROM ALL_TAB_COLUMNS WHERE OWNER = ? AND TABLE_NAME = ? " +
+                             "ORDER BY COLUMN_ID";
+                List<Map<String, Object>> rows = handler.getJdbcTemplate().queryForList(sql, dbName.toUpperCase(), tableName.toUpperCase());
+                String pkSql = "SELECT ACC.COLUMN_NAME FROM ALL_CONS_COLUMNS ACC " +
+                               "JOIN ALL_CONSTRAINTS AC ON ACC.CONSTRAINT_NAME = AC.CONSTRAINT_NAME AND ACC.OWNER = AC.OWNER " +
+                               "WHERE AC.CONSTRAINT_TYPE = 'P' AND AC.OWNER = ? AND AC.TABLE_NAME = ?";
+                List<String> pkCols = handler.getJdbcTemplate().queryForList(pkSql, String.class, dbName.toUpperCase(), tableName.toUpperCase());
+                // 查询字段注释
+                String commentSql = "SELECT COLUMN_NAME, COMMENTS FROM ALL_COL_COMMENTS WHERE OWNER = ? AND TABLE_NAME = ?";
+                Map<String, String> commentMap = new HashMap<>();
+                handler.getJdbcTemplate().queryForList(commentSql, dbName.toUpperCase(), tableName.toUpperCase())
+                    .forEach(r -> commentMap.put(String.valueOf(r.get("COLUMN_NAME")), String.valueOf(r.getOrDefault("COMMENTS", ""))));
+
+                for (Map<String, Object> row : rows) {
+                    ColumnInfo col = new ColumnInfo();
+                    String colName = String.valueOf(row.get("COLUMN_NAME"));
+                    String dataType = String.valueOf(row.get("DATA_TYPE"));
+                    Object precision = row.get("DATA_PRECISION");
+                    Object scale = row.get("DATA_SCALE");
+                    Object dataLen = row.get("DATA_LENGTH");
+                    // Oracle 类型显示：NUMBER(10,2)、VARCHAR2(100)
+                    if (precision != null && !"null".equals(String.valueOf(precision))) {
+                        col.setColumnType(scale != null && !"0".equals(String.valueOf(scale)) && !"null".equals(String.valueOf(scale))
+                            ? dataType + "(" + precision + "," + scale + ")"
+                            : dataType + "(" + precision + ")");
+                    } else if (dataLen != null) {
+                        col.setColumnType(dataType + "(" + dataLen + ")");
+                    } else {
+                        col.setColumnType(dataType);
+                    }
+                    col.setColunmName(colName);
+                    col.setPrimaryKey(pkCols.contains(colName));
+                    col.setNullable("Y".equals(String.valueOf(row.get("NULLABLE"))));
+                    Object defVal = row.get("DATA_DEFAULT");
+                    col.setDefaultValue(defVal != null ? String.valueOf(defVal).trim() : "");
+                    col.setOpt(commentMap.getOrDefault(colName, ""));
+                    columns.add(col);
+                }
+            } else if ("pg".equals(dbtype)) {
+                // PostgreSQL 字段查询
+                String sql = "SELECT c.column_name, c.data_type, c.character_maximum_length, c.numeric_precision, c.numeric_scale, " +
+                             "c.is_nullable, c.column_default, " +
+                             "pgd.description AS column_comment " +
+                             "FROM information_schema.columns c " +
+                             "LEFT JOIN pg_catalog.pg_statio_all_tables st ON st.schemaname = c.table_schema AND st.relname = c.table_name " +
+                             "LEFT JOIN pg_catalog.pg_description pgd ON pgd.objoid = st.relid AND pgd.objsubid = c.ordinal_position " +
+                             "WHERE c.table_schema = ? AND c.table_name = ? " +
+                             "ORDER BY c.ordinal_position";
+                List<Map<String, Object>> rows = handler.getJdbcTemplate().queryForList(sql, dbName, tableName);
+                // 查询主键
+                String pkSql = "SELECT kcu.column_name FROM information_schema.table_constraints tc " +
+                               "JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema " +
+                               "WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = ? AND tc.table_name = ?";
+                List<String> pkCols = handler.getJdbcTemplate().queryForList(pkSql, String.class, dbName, tableName);
+                // 查询唯一约束
+                String uqSql = "SELECT kcu.column_name FROM information_schema.table_constraints tc " +
+                               "JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema " +
+                               "WHERE tc.constraint_type = 'UNIQUE' AND tc.table_schema = ? AND tc.table_name = ?";
+                List<String> uqCols = handler.getJdbcTemplate().queryForList(uqSql, String.class, dbName, tableName);
+
+                for (Map<String, Object> row : rows) {
+                    ColumnInfo col = new ColumnInfo();
+                    String colName = String.valueOf(row.get("column_name"));
+                    String dataType = String.valueOf(row.get("data_type"));
+                    Object charLen = row.get("character_maximum_length");
+                    Object numPrec = row.get("numeric_precision");
+                    Object numScale = row.get("numeric_scale");
+                    // 类型显示
+                    if (charLen != null) {
+                        col.setColumnType(dataType + "(" + charLen + ")");
+                    } else if (numPrec != null) {
+                        col.setColumnType(numScale != null && !"0".equals(String.valueOf(numScale))
+                            ? dataType + "(" + numPrec + "," + numScale + ")"
+                            : dataType + "(" + numPrec + ")");
+                    } else {
+                        col.setColumnType(dataType);
+                    }
+                    col.setColunmName(colName);
+                    col.setPrimaryKey(pkCols.contains(colName));
+                    col.setUnique(uqCols.contains(colName));
+                    col.setNullable("YES".equals(String.valueOf(row.get("is_nullable"))));
+                    Object defVal = row.get("column_default");
+                    col.setDefaultValue(defVal != null ? String.valueOf(defVal) : "");
+                    Object comment = row.get("column_comment");
+                    col.setOpt(comment != null ? String.valueOf(comment) : "");
+                    columns.add(col);
+                }
+            } else {
+                // MySQL/MariaDB
+                String sql = "SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_KEY, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT " +
+                             "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+                             "ORDER BY ORDINAL_POSITION";
+                List<Map<String, Object>> rows = handler.getJdbcTemplate().queryForList(sql, dbName, tableName);
+
+                for (Map<String, Object> row : rows) {
+                    ColumnInfo col = new ColumnInfo();
+                    col.setColunmName(String.valueOf(row.get("COLUMN_NAME")));
+                    col.setColumnType(String.valueOf(row.get("COLUMN_TYPE")));
+                    col.setPrimaryKey("PRI".equals(String.valueOf(row.get("COLUMN_KEY"))));
+                    col.setUnique("UNI".equals(String.valueOf(row.get("COLUMN_KEY"))));
+                    col.setNullable("YES".equals(String.valueOf(row.get("IS_NULLABLE"))));
+                    Object defVal = row.get("COLUMN_DEFAULT");
+                    col.setDefaultValue(defVal != null ? String.valueOf(defVal) : "");
+                    col.setOpt(String.valueOf(row.getOrDefault("COLUMN_COMMENT", "")));
+                    columns.add(col);
+                }
             }
             return success(0, columns);
         } catch (Exception e) {

@@ -6,8 +6,11 @@ import java.util.List;
 import java.util.Map;
 
 import org.ithang.service.ConfigService;
+import org.ithang.service.DaMengDbService;
 import org.ithang.service.DbService;
 import org.ithang.service.MySQLDbService;
+import org.ithang.service.OracleDbService;
+import org.ithang.service.PostgresDbService;
 import org.ithang.tools.model.DBInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,10 @@ public class DbHandlerFactory {
 	public DbHandler createHandler(DBInfo dbInfo) {
 		switch(dbInfo.getDbtype()) {
 		    case "mysql": return new MySQLDbHandler(dbInfo);
+		    case "maria": return new MySQLDbHandler(dbInfo);
+		    case "dm": return new DaMengDbHandler(dbInfo);
+		    case "oracle": return new OracleDbHandler(dbInfo);
+		    case "pg": return new PostgresDbHandler(dbInfo);
 		}
 		return null;
 	}
@@ -64,6 +71,69 @@ public class DbHandlerFactory {
 			}
 		}
 		return null;
+	}
+
+	public DaMengDbService getDaMengService(String title) {
+		if(serviceMap.containsKey(title)) {
+			return (DaMengDbService)serviceMap.get(title);
+		}else {
+			DbHandler handler=getHandler(title);
+			if(null!=handler && handler instanceof DaMengDbHandler) {
+				DaMengDbService dmService=new DaMengDbService((DaMengDbHandler)handler);
+				serviceMap.put(title, dmService);
+				return dmService;
+			}
+		}
+		return null;
+	}
+
+	public OracleDbService getOracleService(String title) {
+		if(serviceMap.containsKey(title)) {
+			return (OracleDbService)serviceMap.get(title);
+		}else {
+			DbHandler handler=getHandler(title);
+			if(null!=handler && handler instanceof OracleDbHandler) {
+				OracleDbService oracleService=new OracleDbService((OracleDbHandler)handler);
+				serviceMap.put(title, oracleService);
+				return oracleService;
+			}
+		}
+		return null;
+	}
+
+	public PostgresDbService getPostgresService(String title) {
+		if(serviceMap.containsKey(title)) {
+			return (PostgresDbService)serviceMap.get(title);
+		}else {
+			DbHandler handler=getHandler(title);
+			if(null!=handler && handler instanceof PostgresDbHandler) {
+				PostgresDbService pgService=new PostgresDbService((PostgresDbHandler)handler);
+				serviceMap.put(title, pgService);
+				return pgService;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 根据数据库类型获取对应的 DbService
+	 */
+	public DbService getDbService(String title) {
+		DBInfo info = configService.getInfoByTitle(title);
+		if (info == null) return null;
+		switch(info.getDbtype()) {
+			case "mysql":
+			case "maria":
+				return getMySQLService(title);
+			case "dm":
+				return getDaMengService(title);
+			case "oracle":
+				return getOracleService(title);
+			case "pg":
+				return getPostgresService(title);
+			default:
+				return getMySQLService(title);
+		}
 	}
 	
 	/**

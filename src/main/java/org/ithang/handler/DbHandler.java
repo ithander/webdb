@@ -69,8 +69,15 @@ public abstract class DbHandler {
 		    case "maria":{
 		    	url = String.format("jdbc:mariadb://%s:%d/%s?useSSL=true", info.getHost(),info.getPort(),info.getDbname());
 		    };break;
-		    case "dameng":{
-		    	url = String.format("jdbc:dm://%s:%d/%s?useSSL=true", info.getHost(),info.getPort(),info.getDbname());
+		    case "dameng":
+		    case "dm":{
+		    	url = String.format("jdbc:dm://%s:%d/%s", info.getHost(),info.getPort(),info.getDbname());
+		    };break;
+		    case "oracle":{
+		    	url = String.format("jdbc:oracle:thin:@%s:%d/%s", info.getHost(),info.getPort(),info.getDbname());
+		    };break;
+		    case "pg":{
+		    	url = String.format("jdbc:postgresql://%s:%d/%s", info.getHost(),info.getPort(),info.getDbname());
 		    };break;
 		    case "h2":{
 		    	H2Info hinfo=(H2Info)info;
@@ -89,7 +96,10 @@ public abstract class DbHandler {
 		switch(dbtype) {
 		    case "mysql": return "com.mysql.cj.jdbc.Driver";
 		    case "maria": return "org.mariadb.jdbc.Driver";
-		    case "dameng": return "dm.jdbc.driver.DmDriver";
+		    case "dameng":
+		    case "dm": return "dm.jdbc.driver.DmDriver";
+		    case "oracle": return "oracle.jdbc.OracleDriver";
+		    case "pg": return "org.postgresql.Driver";
 		    case "h2": return "org.h2.Driver";
 		    default: return "com.mysql.cj.jdbc.Driver";
 		}
