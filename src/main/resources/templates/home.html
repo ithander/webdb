@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -401,6 +401,8 @@
     .ztree .tree-icon-table { color: #67c23a; }
     .ztree .tree-icon-column { color: #909399; }
     .ztree .tree-icon-key { color: #e6a23c; }
+    .data-edit-table td.cell-highlight { background-color: #e6f7ff !important; outline: 2px solid #409eff; }
+    .data-edit-table tr.row-highlight td { background-color: #e6f7ff !important; }
     </#noparse>
   </style>
   <script src="/webdb/jquery-3.7.1.min.js"></script>
@@ -426,17 +428,29 @@
         <span>刷新</span>
       </button>
       <div class="toolbar-separator"></div>
-      <button class="toolbar-btn" onclick="newQuery()" title="新建查询">
-        <i class="layui-icon layui-icon-file"></i>
-        <span>新建查询</span>
-      </button>
+     
       <button class="toolbar-btn primary" onclick="runQuery()" title="执行查询 (F9)">
         <i class="layui-icon layui-icon-triangle-r"></i>
         <span>执行</span>
       </button>
-      <button id="btnClearSql" class="toolbar-btn" onclick="clearCurrentSql()" title="清空SQL" disabled style="opacity:0.5;cursor:not-allowed;">
+      <button id="btnCopySql" class="toolbar-btn" onclick="copyCurrentSql()" title="复制当前查询框中SQL" disabled style="opacity:0.5;cursor:not-allowed;">
+        <i class="layui-icon layui-icon-file-b"></i>
+        <span>复制</span>
+      </button>
+      <button id="btnClearSql" class="toolbar-btn" onclick="clearCurrentSql()" title="清空当前查询框中SQL" disabled style="opacity:0.5;cursor:not-allowed;">
         <i class="layui-icon layui-icon-delete"></i>
         <span>清空</span>
+      </button>
+      <div class="toolbar-separator"></div>
+      <div style="position:relative;display:inline-block;">
+        <button id="btnExport" class="toolbar-btn" onclick="toggleExportMenu()" title="导出" disabled style="opacity:0.5;cursor:not-allowed;">
+          <i class="layui-icon layui-icon-export"></i>
+          <span>导出 ▾</span>
+        </button>
+      </div>
+      <button class="toolbar-btn" onclick="newQuery()" title="新建查询">
+        <i class="layui-icon layui-icon-file"></i>
+        <span>新建查询</span>
       </button>
     </div>
   </div>
@@ -536,23 +550,25 @@
   <script src="/webdb/helpMenu.js"></script>
   
   
-  <script src="/webdb/crypto.js?v=${.now?long}"></script>
-  <script src="/webdb/session.js?v=${.now?long}"></script>
+  <script src="/webdb/BtnMenu.js?v=${.now?long}"></script>
+  <script src="/webdb/session/crypto.js?v=${.now?long}"></script>
+  <script src="/webdb/session/session.js?v=${.now?long}"></script>
+  <script src="/webdb/session/sessionMenu.js?v=${.now?long}"></script>
+  <script src="/webdb/session/tableTab.js?v=${.now?long}"></script>
+  <script src="/webdb/session/tableDataTab.js?v=${.now?long}"></script>
+  <script src="/webdb/session/tableQueryTab.js?v=${.now?long}"></script>
 
   <script>
     // 全局变量
     var layer = layui.layer;
     var currentSession = null;
     var currentTable = null;
-	var infos = WebdbCrypto.loadConfigs();
-	// 启动时同步配置到后端内存
-	if (infos.length > 0) {
-	    $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
-	}
-    
-   
-    
-    
+    var infos = WebdbCrypto.loadConfigs();
+    // 启动时同步配置到后端内存
+    if (infos.length > 0) {
+        $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
+    }
+
     // 初始化
     $(document).ready(function() {
       initSessionTree();
@@ -560,471 +576,8 @@
       initTabs();
       initResizers();
       bindKeyboardShortcuts();
+      bindSessionTreeContextMenu();
     });
-    
-   
-    
-   
-    
-    // 会话树点击事件 - 由 session.js 中的 onSessionClick 处理
-    // 数据库对象树点击事件
-    function onDbObjectClick(event, treeId, treeNode) {
-      if(treeNode.type === 'table') {
-        currentTable = treeNode.tableName;
-        loadTableData(treeNode.tableName);
-        updateStatus('已选择表: ' + treeNode.tableName);
-      }
-    }
-    
-    // 数据库节点展开事件
-    function onDbNodeExpand(event, treeId, treeNode) {
-      // 可以在这里实现延迟加载
-    }
-    
-    // 初始化标签页
-    function initTabs() {
-      $('.tab-item').click(function() {
-        var tabName = $(this).data('tab');
-        switchTab(tabName);
-      });
-      // 监听 SQL 输入框变化，更新清空按钮状态
-      $(document).on('input', '#sqlInput, .sqlInput', function() {
-        if (typeof updateClearSqlBtn === 'function') updateClearSqlBtn();
-      });
-    }
-    
-    // 切换标签页
-    function switchTab(tabName) {
-      $('.tab-item').removeClass('active');
-      $('.tab-item[data-tab="' + tabName + '"]').addClass('active');
-      
-      $('.tab-content').hide();
-      $('.tab-content[data-content="' + tabName + '"]').show();
-      
-      // 更新清空按钮状态
-      if (typeof updateClearSqlBtn === 'function') updateClearSqlBtn();
-    }
-    
-    // 初始化分隔条拖拽
-    function initResizers() {
-      makeResizable($('#resizer2'), $('.left-panel'), 150, 500);
-    }
-    
-    function makeResizable(resizer, panel, minWidth, maxWidth) {
-      var isResizing = false;
-      var lastX = 0;
-      
-      resizer.mousedown(function(e) {
-        isResizing = true;
-        lastX = e.clientX;
-        $('body').css('cursor', 'col-resize');
-        e.preventDefault();
-      });
-      
-      $(document).mousemove(function(e) {
-        if (!isResizing) return;
-        
-        var delta = e.clientX - lastX;
-        var newWidth = panel.width() + delta;
-        
-        if (newWidth >= minWidth && newWidth <= maxWidth) {
-          panel.width(newWidth);
-          lastX = e.clientX;
-        }
-      });
-      
-      $(document).mouseup(function() {
-        if (isResizing) {
-          isResizing = false;
-          $('body').css('cursor', 'default');
-        }
-      });
-    }
-    
-    // 绑定键盘快捷键
-    function bindKeyboardShortcuts() {
-      $(document).keydown(function(e) {
-        // F9 或 Ctrl+Enter 执行查询
-        if (e.keyCode === 120 || (e.ctrlKey && e.keyCode === 13)) {
-          e.preventDefault();
-          runQuery();
-        }
-        // Ctrl+N 新建查询
-        if (e.ctrlKey && e.keyCode === 78) {
-          e.preventDefault();
-          switchTab('query');
-          $('#sqlInput').focus();
-        }
-      });
-    }
-    
-    // 工具栏函数
-    function openSessionManager() {
-        layer.open({
-            type: 2,
-            title: '新增数据库配置',
-            shadeClose: true,
-            area: ['550px', '420px'],
-            content: '/webdb/config/form',
-            btn: ['保存', '取消'],
-            yes: function(index, layero) {
-                if (window.saveForm) {
-                    window.saveForm().then(function(r) {
-                        if (r && r.code === 0) {
-                            layer.close(index);
-                            layer.msg('保存成功');
-                            // 刷新树
-                            infos = WebdbCrypto.loadConfigs();
-                            var zTree = $.fn.zTree.getZTreeObj("sessionTree");
-                            if (zTree) zTree.destroy();
-                            initSessionTree();
-                            // 同步到后端
-                            $.ajax({ url: '/webdb/config/sync', type: 'POST', contentType: 'application/json', data: JSON.stringify(infos) });
-                        }
-                    });
-                }
-            }
-        });
-    }
-
-    function deleteConfig(idx) {
-        var configs = WebdbCrypto.loadConfigs();
-        var removed = configs.splice(idx, 1)[0];
-        WebdbCrypto.saveConfigs(configs);
-        if (removed) {
-            $.ajax({ url: '/webdb/config/del', type: 'POST', contentType: 'application/json', data: JSON.stringify({ title: removed.title }) });
-        }
-        layer.msg('已删除');
-        infos = configs;
-        var zTree = $.fn.zTree.getZTreeObj("sessionTree");
-        if (zTree) zTree.destroy();
-        initSessionTree();
-    }
-    
-    function connectDatabase() {
-      updateStatus('正在连接数据库...');
-      // TODO: 实现连接逻辑
-    }
-    
-    function refreshTree() {
-      var zTree = $.fn.zTree.getZTreeObj("sessionTree");
-      if (!zTree) return;
-      updateStatus('正在刷新...');
-
-      var sessionNodes = zTree.getNodes();
-      var pending = 0;
-
-      sessionNodes.forEach(function(sessionNode) {
-        if (!sessionNode.connected) return;
-        pending++;
-
-        // 记录当前展开的数据库
-        var expandedDbs = [];
-        if (sessionNode.children) {
-          sessionNode.children.forEach(function(dbNode) {
-            if (dbNode.open) expandedDbs.push(dbNode.dbName);
-          });
-          // 删除所有子节点
-          zTree.removeChildNodes(sessionNode);
-        }
-        sessionNode._loaded = false;
-
-        // 重新加载数据库列表
-        $.ajax({
-          url: "/webdb/session/databases",
-          type: "GET",
-          data: { title: sessionNode.title },
-          success: function(result) {
-            if (result.code === 0 && result.data) {
-              var dbDataList = [];
-              result.data.forEach(function(dbName) {
-                nodeIdCounter++;
-                dbDataList.push({
-                  id: nodeIdCounter, pId: sessionNode.id,
-                  name: ICON.database + ' ' + dbName,
-                  isParent: true, title: sessionNode.title,
-                  dbName: dbName, dbtype: sessionNode.dbtype
-                });
-              });
-              zTree.addNodes(sessionNode, dbDataList);
-              sessionNode._loaded = true;
-
-              // 恢复之前展开的数据库
-              if (sessionNode.children && expandedDbs.length > 0) {
-                sessionNode.children.forEach(function(dbNode) {
-                  if (expandedDbs.indexOf(dbNode.dbName) === -1) return;
-                  dbNode._loaded = false;
-                  $.ajax({
-                    url: "/webdb/session/tables",
-                    type: "GET",
-                    data: { title: dbNode.title, dbName: dbNode.dbName },
-                    success: function(tblResult) {
-                      if (tblResult.code === 0 && tblResult.data) {
-                        var tblDataList = [];
-                        tblResult.data.forEach(function(table) {
-                          nodeIdCounter++;
-                          tblDataList.push({
-                            id: nodeIdCounter, pId: dbNode.id,
-                            name: ICON.table + ' ' + table.tableName + ' <span style="color:#999;font-size:11px;">(' + table.total + '行)</span>',
-                            isParent: true, title: dbNode.title,
-                            dbName: dbNode.dbName, tableName: table.tableName,
-                            dbtype: dbNode.dbtype
-                          });
-                        });
-                        zTree.addNodes(dbNode, tblDataList);
-                        dbNode._loaded = true;
-                        zTree.expandNode(dbNode, true, false, false);
-                      }
-                    }
-                  });
-                });
-              }
-            }
-            pending--;
-            if (pending === 0) updateStatus('已刷新');
-          },
-          error: function() {
-            pending--;
-            if (pending === 0) updateStatus('已刷新');
-          }
-        });
-      });
-
-      if (pending === 0) updateStatus('已刷新');
-    }
-    
-    function refreshDbTree() {
-      refreshTree();
-    }
-    
-    var _queryTabCount = 1;
-    
-    function newQuery() {
-      _queryTabCount++;
-      var tabId = 'query-' + _queryTabCount;
-      
-      // 添加 tab 头
-      var tabHtml = '<div class="tab-item" data-tab="' + tabId + '" style="position:relative;">' +
-        '<i class="layui-icon layui-icon-file"></i>' +
-        '<span>查询' + _queryTabCount + '</span>' +
-        '<span class="tab-close" data-close="' + tabId + '" style="margin-left:5px;cursor:pointer;color:#999;font-size:14px;">&times;</span>' +
-        '</div>';
-      $('#tabsHeader').append(tabHtml);
-      
-      // 添加 tab 内容
-      var contentHtml = '<div class="tab-content" data-content="' + tabId + '" style="display:none;">' +
-        '<div id="queryView-' + tabId + '" style="display:flex;flex-direction:column;height:100%;">' +
-          '<div style="padding:5px 8px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #eee;">' +
-            '<span id="queryInfo-' + tabId + '" style="font-size:12px;color:#999;margin-left:auto;"></span>' +
-          '</div>' +
-          '<div style="padding:5px 8px;">' +
-            '<textarea class="sqlInput" data-tab="' + tabId + '" rows="5" placeholder="输入 SQL 查询语句，按 Ctrl+Enter 或 F9 执行" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-family:Consolas,monospace;font-size:13px;resize:vertical;"></textarea>' +
-          '</div>' +
-          '<div class="queryResult" data-tab="' + tabId + '" style="flex:1;overflow:auto;padding:0 8px 8px;">' +
-            '<div class="empty-state" style="padding:30px 0;"><p style="color:#999;">输入 SQL 语句并执行</p></div>' +
-          '</div>' +
-        '</div>' +
-        '</div>';
-      $('#tabsContent').append(contentHtml);
-      
-      // 绑定新 tab 的点击和关闭
-      $('#tabsHeader .tab-item[data-tab="' + tabId + '"]').click(function() {
-        switchTab(tabId);
-      });
-      $('#tabsHeader .tab-close[data-close="' + tabId + '"]').click(function(e) {
-        e.stopPropagation();
-        closeQueryTab(tabId);
-      });
-      
-      // 切换到新 tab
-      switchTab(tabId);
-      $('#tabsContent .sqlInput[data-tab="' + tabId + '"]').focus();
-      updateStatus('新建查询' + _queryTabCount);
-    }
-    
-    function closeQueryTab(tabId) {
-      // 如果关闭的是当前 tab，切换到第一个 tab
-      var $tab = $('#tabsHeader .tab-item[data-tab="' + tabId + '"]');
-      var isActive = $tab.hasClass('active');
-      $tab.remove();
-      $('#tabsContent .tab-content[data-content="' + tabId + '"]').remove();
-      if (isActive) {
-        switchTab('structure');
-      }
-    }
-    
-    function executeQuery() {
-      var sql = $('#sqlEditor').val().trim();
-      if (!sql) {
-        layer.msg('请输入 SQL 语句');
-        return;
-      }
-      
-      // 检查是否有会话信息
-      var sessionTitle ='';
-      if (!sessionTitle) {
-        layer.msg('未连接到数据库');
-        return;
-      }
-      
-      updateStatus('正在执行查询...');
-      var startTime = new Date().getTime();
-      
-      // 判断是查询还是更新语句
-      var sqlUpper = sql.toUpperCase().trim();
-      var isQuery = sqlUpper.startsWith('SELECT') || 
-                    sqlUpper.startsWith('SHOW') || 
-                    sqlUpper.startsWith('DESCRIBE') ||
-                    sqlUpper.startsWith('DESC') ||
-                    sqlUpper.startsWith('EXPLAIN');
-      
-      var apiUrl = isQuery ? '/webdb/db/mysql/executeQuery' : '/webdb/db/mysql/executeUpdate';
-      
-      $.ajax({
-        url: apiUrl,
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          title: sessionTitle,
-          sql: sql
-        }),
-        success: function(result) {
-          var endTime = new Date().getTime();
-          var duration = (endTime - startTime) / 1000;
-          
-          if (result.code === 0) {
-            if (isQuery) {
-              // 查询语句 - 显示结果表格
-              renderQueryResult(result.data);
-              $('#queryTime').text('查询耗时: ' + result.data.duration + ' 秒 | 返回 ' + result.data.count + ' 行');
-              updateStatus('查询成功');
-            } else {
-              // 更新语句 - 显示影响行数
-              $('#queryResult').html(
-                '<div style="padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; color: #155724;">' +
-                '<i class="layui-icon layui-icon-ok-circle" style="font-size: 20px;"></i> ' +
-                '<strong>执行成功</strong><br>' +
-                '影响行数: ' + result.data.affectedRows + '<br>' +
-                '耗时: ' + result.data.duration + ' 秒' +
-                '</div>'
-              );
-              $('#queryTime').text('执行耗时: ' + result.data.duration + ' 秒 | 影响 ' + result.data.affectedRows + ' 行');
-              updateStatus('执行成功');
-            }
-          } else {
-            layer.msg(result.msg || '执行失败');
-            $('#queryResult').html(
-              '<div style="padding: 20px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">' +
-              '<i class="layui-icon layui-icon-close-fill" style="font-size: 20px;"></i> ' +
-              '<strong>执行失败</strong><br>' +
-              result.msg +
-              '</div>'
-            );
-            updateStatus('执行失败', 'error');
-          }
-        },
-        error: function(xhr, status, error) {
-          var endTime = new Date().getTime();
-          var duration = (endTime - startTime) / 1000;
-          
-          layer.msg('请求失败: ' + error);
-          $('#queryResult').html(
-            '<div style="padding: 20px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">' +
-            '<i class="layui-icon layui-icon-close-fill" style="font-size: 20px;"></i> ' +
-            '<strong>请求失败</strong><br>' +
-            error +
-            '</div>'
-          );
-          $('#queryTime').text('耗时: ' + duration + ' 秒');
-          updateStatus('请求失败', 'error');
-        }
-      });
-    }
-    
-    // 渲染查询结果表格
-    function renderQueryResult(data) {
-      if (!data || !data.data || data.data.length === 0) {
-        $('#queryResult').html(
-          '<div style="padding: 20px; text-align: center; color: #6c757d; margin-top: 20px;">' +
-          '<i class="layui-icon layui-icon-tips" style="font-size: 48px;"></i><br>' +
-          '查询成功，但没有返回数据' +
-          '</div>'
-        );
-        return;
-      }
-      
-      var rows = data.data;
-      
-      // 获取列名（从第一行数据中提取）
-      var columns = [];
-      if (rows.length > 0) {
-        var firstRow = rows[0];
-        for (var key in firstRow) {
-          if (firstRow.hasOwnProperty(key)) {
-            columns.push({
-              field: key,
-              title: key,
-              minWidth: 120
-            });
-          }
-        }
-      }
-      
-      // 创建带滚动容器的表格
-      $('#queryResult').html(
-        '<div class="query-result-container">' +
-        '<table id="resultTable" lay-filter="resultTable"></table>' +
-        '</div>'
-      );
-      
-      // 计算表格高度（容器高度减去分页栏高度）
-      var containerHeight = $('#queryResult').height() - 80;
-      var tableHeight = containerHeight - 50; // 减去分页组件高度
-      
-      // 使用 Layui Table 渲染
-      layui.use('table', function(){
-        var table = layui.table;
-        
-        table.render({
-          elem: '#resultTable',
-          data: rows,
-          cols: [columns],
-          page: true,
-          limit: 50,
-          limits: [10, 20, 50, 100, 200],
-          skin: 'line',
-          even: true,
-          size: 'sm',
-          height: tableHeight, // 使用计算的高度，表头固定，数据区域可滚动
-          text: {
-            none: '暂无数据'
-          }
-        });
-      });
-    }
-    
-    function clearEditor() {
-      $('#sqlEditor').val('');
-      $('#queryResult').html('');
-      $('#queryTime').text('');
-      updateStatus('已清空');
-    }
-    
-    function openInNewWindow() {
-      window.open(window.location.href, '_blank');
-    }
-    
-    // 加载表数据 - 由 session.js 中的 loadTableData 处理
-    
-    // 更新状态栏
-    function updateStatus(text, type) {
-      $('#statusText').text(text);
-      if (type === 'error') {
-        $('#statusText').css('color', '#dc3545');
-      } else {
-        $('#statusText').css('color', '#495057');
-      }
-    }
   </script>
 </body>
 </html>
