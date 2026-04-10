@@ -264,10 +264,10 @@ public class SessionAction extends DbAction {
                     Object charLen = row.get("character_maximum_length");
                     Object numPrec = row.get("numeric_precision");
                     Object numScale = row.get("numeric_scale");
-                    // 类型显示
-                    if (charLen != null) {
+                    // PostgreSQL 类型显示: 只有 character varying/char 拼长度, numeric/decimal 拼精度
+                    if (charLen != null && (dataType.contains("character") || dataType.contains("char") || dataType.equals("bit"))) {
                         col.setColumnType(dataType + "(" + charLen + ")");
-                    } else if (numPrec != null) {
+                    } else if (numPrec != null && (dataType.equals("numeric") || dataType.equals("decimal"))) {
                         col.setColumnType(numScale != null && !"0".equals(String.valueOf(numScale))
                             ? dataType + "(" + numPrec + "," + numScale + ")"
                             : dataType + "(" + numPrec + ")");
@@ -332,6 +332,11 @@ public class SessionAction extends DbAction {
                 return fail("未找到会话: " + title);
             }
 
+            DBInfo info = configService.getInfoByTitle(title);
+            String dbtype = info != null ? info.getDbtype() : "mysql";
+            boolean isPg = "pg".equals(dbtype);
+            boolean isOracle = "oracle".equals(dbtype) || "dm".equals(dbtype);
+
             List<String> sqls = new ArrayList<>();
             String fullTableName = StrUtil.isNotBlank(dbName) ? dbName + "." + tableName : tableName;
 
@@ -342,7 +347,6 @@ public class SessionAction extends DbAction {
                 String comment = (String) col.get("opt");
 
                 if (i < originalColumns.size()) {
-                    // 修改已有字段
                     Map<String, Object> orig = originalColumns.get(i);
                     String origName = (String) orig.get("colunmName");
                     String origType = (String) orig.get("columnType");
@@ -360,27 +364,80 @@ public class SessionAction extends DbAction {
                     boolean nullableChanged = (nullable != null && origNullable != null) ? !nullable.equals(origNullable) : false;
 
                     if (nameChanged || typeChanged || commentChanged || defaultChanged || nullableChanged) {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append("ALTER TABLE ").append(fullTableName);
-                        if (nameChanged) {
-                            sb.append(" CHANGE COLUMN `").append(origName).append("` `").append(colName).append("` ").append(colType);
+                        if (isPg) {
+                            // PostgreSQL: 每种变更单独一条语句
+                            if (nameChanged) {
+                                sqls.add("ALTER TABLE " + fullTableName + " RENAME COLUMN \"" + origName + "\" TO \"" + colName + "\"");
+                            }
+                            if (typeChanged) {
+                                sqls.add("ALTER TABLE " + fullTableName + " ALTER COLUMN \"" + colName + "\" TYPE " + colType + " USING \"" + colName + "\"::" + colType);
+                            }
+                            if (nullableChanged) {
+                                if (nullable != null && !nullable) {
+                                    sqls.add("ALTER TABLE " + fullTableName + " ALTER COLUMN \"" + colName + "\" SET NOT NULL");
+                                } else {
+                                    sqls.add("ALTER TABLE " + fullTableName + " ALTER COLUMN \"" + colName + "\" DROP NOT NULL");
+                                }
+                            }
+                            if (defaultChanged) {
+                                if (StrUtil.isNotBlank(defaultValue)) {
+                                    sqls.add("ALTER TABLE " + fullTableName + " ALTER COLUMN \"" + colName + "\" SET DEFAULT '" + defaultValue.replace("'", "''") + "'");
+                                } else {
+                                    sqls.add("ALTER TABLE " + fullTableName + " ALTER COLUMN \"" + colName + "\" DROP DEFAULT");
+                                }
+                            }
+                            if (commentChanged) {
+                                String escapedComment = comment != null ? comment.replace("'", "''") : "";
+                                sqls.add("COMMENT ON COLUMN " + fullTableName + ".\"" + colName + "\" IS '" + escapedComment + "'");
+                            }
+                        } else if (isOracle) {
+                            // Oracle/DaMeng: 每种变更单独一条语句
+                            if (nameChanged) {
+                                sqls.add("ALTER TABLE " + fullTableName + " RENAME COLUMN \"" + origName + "\" TO \"" + colName + "\"");
+                            }
+                            if (typeChanged) {
+                                sqls.add("ALTER TABLE " + fullTableName + " MODIFY (\"" + colName + "\" " + colType + ")");
+                            }
+                            if (nullableChanged) {
+                                if (nullable != null && !nullable) {
+                                    sqls.add("ALTER TABLE " + fullTableName + " MODIFY (\"" + colName + "\" NOT NULL)");
+                                } else {
+                                    sqls.add("ALTER TABLE " + fullTableName + " MODIFY (\"" + colName + "\" NULL)");
+                                }
+                            }
+                            if (defaultChanged) {
+                                if (StrUtil.isNotBlank(defaultValue)) {
+                                    sqls.add("ALTER TABLE " + fullTableName + " MODIFY (\"" + colName + "\" DEFAULT '" + defaultValue.replace("'", "''") + "')");
+                                } else {
+                                    sqls.add("ALTER TABLE " + fullTableName + " MODIFY (\"" + colName + "\" DEFAULT NULL)");
+                                }
+                            }
+                            if (commentChanged) {
+                                String escapedComment = comment != null ? comment.replace("'", "''") : "";
+                                sqls.add("COMMENT ON COLUMN " + fullTableName + ".\"" + colName + "\" IS '" + escapedComment + "'");
+                            }
                         } else {
-                            sb.append(" MODIFY COLUMN `").append(colName).append("` ").append(colType);
+                            // MySQL/MariaDB
+                            StringBuilder sb = new StringBuilder();
+                            sb.append("ALTER TABLE ").append(fullTableName);
+                            if (nameChanged) {
+                                sb.append(" CHANGE COLUMN `").append(origName).append("` `").append(colName).append("` ").append(colType);
+                            } else {
+                                sb.append(" MODIFY COLUMN `").append(colName).append("` ").append(colType);
+                            }
+                            if (nullable != null && !nullable) {
+                                sb.append(" NOT NULL");
+                            } else {
+                                sb.append(" NULL");
+                            }
+                            if (StrUtil.isNotBlank(defaultValue)) {
+                                sb.append(" DEFAULT '").append(defaultValue.replace("'", "\\'")).append("'");
+                            }
+                            if (StrUtil.isNotBlank(comment)) {
+                                sb.append(" COMMENT '").append(comment.replace("'", "\\'")).append("'");
+                            }
+                            sqls.add(sb.toString());
                         }
-                        // nullable
-                        if (nullable != null && !nullable) {
-                            sb.append(" NOT NULL");
-                        } else {
-                            sb.append(" NULL");
-                        }
-                        // default value
-                        if (StrUtil.isNotBlank(defaultValue)) {
-                            sb.append(" DEFAULT '").append(defaultValue.replace("'", "\\'")).append("'");
-                        }
-                        if (StrUtil.isNotBlank(comment)) {
-                            sb.append(" COMMENT '").append(comment.replace("'", "\\'")).append("'");
-                        }
-                        sqls.add(sb.toString());
                     }
                 }
             }
@@ -389,7 +446,6 @@ public class SessionAction extends DbAction {
                 return success(0, "没有需要修改的内容");
             }
 
-            // 逐条执行 ALTER 语句
             List<String> executed = new ArrayList<>();
             for (String sql : sqls) {
                 log.info("执行 ALTER: {}", sql);

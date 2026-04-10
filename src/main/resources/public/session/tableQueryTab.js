@@ -7,14 +7,32 @@ function runQuery() {
     else { layer.msg('请先切换到查询标签页'); return; }
     var sql = $sqlInput.val().trim();
     if (!sql) { layer.msg('请输入 SQL 语句'); return; }
-    var zTree = $.fn.zTree.getZTreeObj("sessionTree"), title = null;
-    if (zTree) { zTree.getNodes().forEach(function(n) { if (n.connected) title = n.title; }); }
+    var title = null, dbName = null;
+    // 优先使用当前选中的会话上下文
+    if (_currentSession.title) {
+        var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+        if (zTree) {
+            var rootNodes = zTree.getNodes();
+            for (var i = 0; i < rootNodes.length; i++) {
+                if (rootNodes[i].title === _currentSession.title && rootNodes[i].connected) {
+                    title = _currentSession.title;
+                    dbName = _currentSession.dbName;
+                    break;
+                }
+            }
+        }
+    }
+    // 回退：取任意已连接的会话
+    if (!title) {
+        var zTree = $.fn.zTree.getZTreeObj("sessionTree");
+        if (zTree) { zTree.getNodes().forEach(function(n) { if (n.connected) title = n.title; }); }
+    }
     if (!title) { layer.msg('请先连接一个数据库'); return; }
     $result.html('<div style="padding:10px;color:#999;">正在执行...</div>');
     $info.text('');
     var isSelect = sql.toUpperCase().trimStart().startsWith('SELECT') || sql.toUpperCase().trimStart().startsWith('SHOW') || sql.toUpperCase().trimStart().startsWith('DESC');
     var url = isSelect ? "/webdb/db/mysql/executeQuery" : "/webdb/db/mysql/executeUpdate";
-    $.ajax({ url: url, type: "POST", contentType: "application/json", data: JSON.stringify({ title: title, sql: sql }),
+    $.ajax({ url: url, type: "POST", contentType: "application/json", data: JSON.stringify({ title: title, dbName: dbName, sql: sql }),
         success: function(result) {
             if (result.code === 0 && result.data) {
                 if (isSelect) {
@@ -82,8 +100,8 @@ function bindQueryExportBtn(activeTab, rows, cols) {
         html += '</div>'; $('body').append(html);
         var offset = $(this).offset(); $('#qryExportMenu').css({ left: offset.left, top: offset.top + $(this).outerHeight() + 2 });
         $('.qry-export-item').on('mouseenter', function() { $(this).css('background', '#f0f0f0'); }).on('mouseleave', function() { $(this).css('background', ''); });
-        $('.qry-export-item').on('click', function() { var format = $(this).data('format'); $('#qryExportMenu').remove(); exportQueryResult(rows, cols, format); });
-        $(document).one('click', function() { $('#qryExportMenu').remove(); });
+        $('.qry-export-item').on('click', function() { var format = $(this).data('format'); $('#qryExportMenu').remove(); $(document).off('click.qryExportMenu'); exportQueryResult(rows, cols, format); });
+        setTimeout(function() { $(document).on('click.qryExportMenu', function(e) { if (!$(e.target).closest('#qryExportMenu').length) { $('#qryExportMenu').remove(); $(document).off('click.qryExportMenu'); } }); }, 0);
     });
 }
 
@@ -92,7 +110,7 @@ function exportQueryResult(rows, cols, format) {
     if (format === 'csv') { content = '\uFEFF' + cols.join(',') + '\n'; rows.forEach(function(row) { content += cols.map(function(c) { var v = row[c]; if (v === null || v === undefined) return ''; var s = String(v); return (s.indexOf(',') > -1 || s.indexOf('"') > -1) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',') + '\n'; }); filename += '.csv'; mime = 'text/csv;charset=utf-8'; }
     else if (format === 'json') { content = JSON.stringify(rows, null, 2); filename += '.json'; mime = 'application/json;charset=utf-8'; }
     else if (format === 'jsonline') { rows.forEach(function(row) { content += JSON.stringify(row) + '\n'; }); filename += '.json'; mime = 'application/x-ndjson;charset=utf-8'; }
-    else if (format === 'sql') { var sqlTbl = 'table_name'; var m = (window._lastQuerySql || '').match(/\bFROM\s+([^\s,;(]+)/i); if (m) { var _t = m[1].replace(/`/g, ''); sqlTbl = _t.indexOf('.') > -1 ? _t.split('.').pop() : _t; } rows.forEach(function(row) { var c = cols.map(function(c) { return '`' + c + '`'; }).join(', '); var v = cols.map(function(c) { var val = row[c]; return val === null || val === undefined ? 'NULL' : "'" + String(val).replace(/'/g, "\\'") + "'"; }).join(', '); content += 'INSERT INTO ' + sqlTbl + ' (' + c + ') VALUES (' + v + ');\n'; }); filename += '.sql'; }
+    else if (format === 'sql') { var dt = (_dataCtx && _dataCtx.dbtype) ? _dataCtx.dbtype : 'mysql'; var q = _q(dt); var sqlTbl = 'table_name'; var m = (window._lastQuerySql || '').match(/\bFROM\s+([^\s,;(]+)/i); if (m) { var _t = m[1].replace(/`/g, '').replace(/"/g, ''); sqlTbl = _t.indexOf('.') > -1 ? _t.split('.').pop() : _t; } rows.forEach(function(row) { var c = cols.map(function(c) { return q + c + q; }).join(', '); var v = cols.map(function(c) { var val = row[c]; return val === null || val === undefined ? 'NULL' : "'" + _escVal(dt, String(val)) + "'"; }).join(', '); content += 'INSERT INTO ' + sqlTbl + ' (' + c + ') VALUES (' + v + ');\n'; }); filename += '.sql'; }
     var blob = new Blob([content], { type: mime }); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); layer.msg('已导出: ' + filename);
 }
 

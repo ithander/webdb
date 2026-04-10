@@ -8,13 +8,52 @@ var MYSQL_TYPES = [
     'json','enum','set','bit','boolean'
 ];
 
-function buildTypeSelect(currentType) {
-    var baseType = currentType.replace(/\(.*\)/, '').trim().toLowerCase();
+var PG_TYPES = [
+    'integer','bigint','smallint','serial','bigserial',
+    'numeric','real','double precision',
+    'character varying','varchar','character','char','text',
+    'date','timestamp','timestamp with time zone','time','time with time zone','interval',
+    'boolean','bytea','json','jsonb','uuid','xml',
+    'inet','cidr','macaddr','bit','bit varying',
+    'money','oid','array'
+];
+
+var ORACLE_TYPES = [
+    'NUMBER','VARCHAR2','CHAR','NVARCHAR2','NCHAR',
+    'DATE','TIMESTAMP','CLOB','NCLOB','BLOB','RAW','LONG RAW',
+    'BINARY_FLOAT','BINARY_DOUBLE','XMLTYPE','ROWID'
+];
+
+function _getTypeList(dbtype) {
+    if (dbtype === 'pg') return PG_TYPES;
+    if (dbtype === 'oracle' || dbtype === 'dm') return ORACLE_TYPES;
+    return MYSQL_TYPES;
+}
+
+// 判断类型是否接受长度参数
+var _PG_NO_LENGTH = ['integer','bigint','smallint','serial','bigserial','real','double precision','text','boolean','bytea','json','jsonb','uuid','xml','date','inet','cidr','macaddr','money','oid','array','bool','int4','int8','int2','float4','float8'];
+function _typeAcceptsLength(baseType, dbtype) {
+    if (dbtype === 'pg') return _PG_NO_LENGTH.indexOf(baseType.toLowerCase()) === -1;
+    return true;
+}
+
+function buildTypeSelect(currentType, dbtype) {
+    var baseType = currentType.replace(/\(.*\)/, '').trim();
     var lengthMatch = currentType.match(/\(([^)]+)\)/);
     var length = lengthMatch ? lengthMatch[1] : '';
+    var types = _getTypeList(dbtype || '');
+    // 匹配时忽略大小写
+    var baseTypeLower = baseType.toLowerCase();
+    var matched = false;
     var html = '<div style="display:flex;align-items:center;gap:3px;">';
     html += '<select class="struct-type-select" style="padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;height:26px;">';
-    MYSQL_TYPES.forEach(function(t) { html += '<option value="' + t + '"' + (t === baseType ? ' selected' : '') + '>' + t + '</option>'; });
+    types.forEach(function(t) {
+        var sel = (t.toLowerCase() === baseTypeLower) ? ' selected' : '';
+        if (sel) matched = true;
+        html += '<option value="' + t + '"' + sel + '>' + t + '</option>';
+    });
+    // 如果当前类型不在列表中，额外添加
+    if (!matched) { html += '<option value="' + baseType + '" selected>' + baseType + '</option>'; }
     html += '</select>';
     html += '<input type="text" class="struct-type-length" value="' + length + '" placeholder="长度" style="width:50px;padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;height:26px;">';
     html += '</div>';
@@ -68,7 +107,7 @@ function loadTableStructure(title, dbName, tableName) {
                         html += '<tr data-col="' + col.colunmName + '">';
                         html += '<td style="color:#999;">' + (idx + 1) + '</td>';
                         html += '<td><input type="text" class="struct-field-name" value="' + col.colunmName + '" style="width:100%;padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;height:26px;' + (col.primaryKey ? 'color:#e6a23c;font-weight:bold;' : '') + '"></td>';
-                        html += '<td>' + buildTypeSelect(col.columnType) + '</td>';
+                        html += '<td>' + buildTypeSelect(col.columnType, dbtype) + '</td>';
                         html += '<td><input type="text" class="struct-default" value="' + (col.defaultValue || '') + '" style="width:100%;padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;height:26px;"></td>';
                         html += '<td style="text-align:center;"><input type="checkbox" class="struct-nullable"' + (col.nullable ? ' checked' : '') + '></td>';
                         html += '<td style="text-align:center;"><input type="checkbox" class="struct-pk"' + (col.primaryKey ? ' checked' : '') + '></td>';
@@ -108,12 +147,15 @@ function loadTableStructure(title, dbName, tableName) {
 }
 
 function addStructField(title, dbName, tableName) {
+    var info = window._structTableInfo || {};
+    var dbtype = info.dbtype || '';
+    var defaultType = (dbtype === 'pg') ? 'character varying(255)' : (dbtype === 'oracle' || dbtype === 'dm') ? 'VARCHAR2(255)' : 'varchar(255)';
     var $tbody = $('#structureView table tbody');
     var rowCount = $tbody.find('tr').length + 1;
     var html = '<tr data-col="" data-new="true" style="background-color:#f0fff0;">';
     html += '<td style="color:#28a745;font-weight:bold;">' + rowCount + '</td>';
     html += '<td><input type="text" class="struct-field-name" value="" placeholder="字段名" style="width:100%;padding:2px 4px;border:1px solid #28a745;border-radius:3px;font-size:12px;height:26px;"></td>';
-    html += '<td>' + buildTypeSelect('varchar(255)') + '</td>';
+    html += '<td>' + buildTypeSelect(defaultType, dbtype) + '</td>';
     html += '<td><input type="text" class="struct-default" value="" style="width:100%;padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;height:26px;"></td>';
     html += '<td style="text-align:center;"><input type="checkbox" class="struct-nullable" checked></td>';
     html += '<td style="text-align:center;"><input type="checkbox" class="struct-pk"></td>';
@@ -128,8 +170,14 @@ function addStructField(title, dbName, tableName) {
 function deleteStructField(el, title, dbName, tableName, colName) {
     layer.confirm('确定删除字段 <b>' + colName + '</b> ？', function(idx) {
         layer.close(idx);
+        var info = window._structTableInfo || {};
+        var q = (info.dbtype === 'mysql' || info.dbtype === 'maria') ? '`' : '"';
+        var sql = 'ALTER TABLE ' + dbName + '.' + tableName + ' DROP COLUMN ' + q + colName + q;
+        if (info.dbtype === 'oracle' || info.dbtype === 'dm') {
+            sql = 'ALTER TABLE ' + dbName + '.' + tableName + ' DROP (' + q + colName + q + ')';
+        }
         $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json",
-            data: JSON.stringify({ title: title, sql: 'ALTER TABLE ' + dbName + '.' + tableName + ' DROP COLUMN `' + colName + '`' }),
+            data: JSON.stringify({ title: title, sql: sql }),
             success: function(r) { if (r.code === 0) { layer.msg('字段已删除'); loadTableStructure(title, dbName, tableName); } else { layer.msg('删除失败: ' + (r.msg || '')); } },
             error: function() { layer.msg('请求失败'); }
         });
@@ -137,25 +185,30 @@ function deleteStructField(el, title, dbName, tableName, colName) {
 }
 
 function saveTableStructure(title, dbName, tableName) {
+    var info = window._structTableInfo || {};
+    var dbtype = info.dbtype || '';
     var columns = [], newColumns = [];
     $('#structureView tbody tr').each(function() {
         var $row = $(this);
         var baseType = $row.find('.struct-type-select').val();
         var length = $row.find('.struct-type-length').val();
-        var fullType = length ? baseType + '(' + length + ')' : baseType;
+        var fullType = (length && _typeAcceptsLength(baseType, dbtype)) ? baseType + '(' + length + ')' : baseType;
         var col = { colunmName: $row.find('.struct-field-name').val(), columnType: fullType, primaryKey: $row.find('.struct-pk').is(':checked'), unique: $row.find('.struct-unique').is(':checked'), nullable: $row.find('.struct-nullable').is(':checked'), defaultValue: $row.find('.struct-default').val(), opt: $row.find('.struct-comment').val() };
         if ($row.data('new')) { if (col.colunmName && col.colunmName.trim()) newColumns.push(col); }
         else { columns.push(col); }
     });
     if (!window._originalColumns) { layer.msg('无法获取原始字段信息'); return; }
 
-    var info = window._structTableInfo || {};
     var pendingAlters = [];
 
     // 表名修改
     var newTableName = ($('#structTableName').val() || '').trim();
     if (newTableName && newTableName !== tableName) {
-        pendingAlters.push('ALTER TABLE ' + dbName + '.' + tableName + ' RENAME TO ' + dbName + '.' + newTableName);
+        if (info.dbtype === 'pg' || info.dbtype === 'oracle' || info.dbtype === 'dm') {
+            pendingAlters.push('ALTER TABLE ' + dbName + '.' + tableName + ' RENAME TO ' + newTableName);
+        } else {
+            pendingAlters.push('ALTER TABLE ' + dbName + '.' + tableName + ' RENAME TO ' + dbName + '.' + newTableName);
+        }
     }
     var effectiveTable = (newTableName && newTableName !== tableName) ? newTableName : tableName;
 
@@ -201,13 +254,34 @@ function saveTableStructure(title, dbName, tableName) {
         if (newColumns.length === 0) { addDone(); return; }
         var addErrors = [];
         newColumns.forEach(function(col) {
-            var sql = 'ALTER TABLE ' + dbName + '.' + effectiveTable + ' ADD COLUMN `' + col.colunmName + '` ' + col.columnType;
-            if (!col.nullable) sql += ' NOT NULL'; else sql += ' NULL';
-            if (col.defaultValue) sql += " DEFAULT '" + col.defaultValue.replace(/'/g, "\\'") + "'";
-            if (col.opt) sql += " COMMENT '" + col.opt.replace(/'/g, "\\'") + "'";
-            $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json", data: JSON.stringify({ title: title, sql: sql }),
-                success: function(r) { if (r.code !== 0) addErrors.push(col.colunmName + ': ' + (r.msg || '')); addPending--; if (addPending === 0) { if (addErrors.length > 0) layer.msg('部分字段添加失败'); addDone(); } },
-                error: function() { addErrors.push(col.colunmName + ': 请求失败'); addPending--; if (addPending === 0) addDone(); }
+            var isPg = (info.dbtype === 'pg');
+            var isOracle = (info.dbtype === 'oracle' || info.dbtype === 'dm');
+            var q = (isPg || isOracle) ? '"' : '`';
+            var sql = 'ALTER TABLE ' + dbName + '.' + effectiveTable + ' ADD COLUMN ' + q + col.colunmName + q + ' ' + col.columnType;
+            if (isOracle) {
+                // Oracle/DaMeng: ADD (col type)
+                sql = 'ALTER TABLE ' + dbName + '.' + effectiveTable + ' ADD (' + q + col.colunmName + q + ' ' + col.columnType;
+                if (!col.nullable) sql += ' NOT NULL';
+                if (col.defaultValue) sql += " DEFAULT '" + col.defaultValue.replace(/'/g, "''") + "'";
+                sql += ')';
+            } else {
+                if (!col.nullable) sql += ' NOT NULL'; else sql += ' NULL';
+                if (col.defaultValue) {
+                    var escaped = isPg ? col.defaultValue.replace(/'/g, "''") : col.defaultValue.replace(/'/g, "\\'");
+                    sql += " DEFAULT '" + escaped + "'";
+                }
+                if (!isPg && col.opt) sql += " COMMENT '" + col.opt.replace(/'/g, "\\'") + "'";
+            }
+            var sqls = isOracle ? [sql] : [sql];
+            if ((isPg || isOracle) && col.opt) {
+                sqls.push("COMMENT ON COLUMN " + dbName + '.' + effectiveTable + '.' + q + col.colunmName + q + " IS '" + col.opt.replace(/'/g, "''") + "'");
+            }
+            var pending = sqls.length;
+            sqls.forEach(function(s) {
+                $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json", data: JSON.stringify({ title: title, sql: s }),
+                    success: function(r) { if (r.code !== 0) addErrors.push(col.colunmName + ': ' + (r.msg || '')); pending--; if (pending === 0) { addPending--; if (addPending === 0) { if (addErrors.length > 0) layer.msg('部分字段添加失败'); addDone(); } } },
+                    error: function() { addErrors.push(col.colunmName + ': 请求失败'); pending--; if (pending === 0) { addPending--; if (addPending === 0) addDone(); } }
+                });
             });
         });
     };

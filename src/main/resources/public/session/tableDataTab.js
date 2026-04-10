@@ -11,9 +11,10 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
     var $view = $('#dataView');
     $view.html('<div style="padding:10px;color:#999;">正在加载数据...</div>');
     var countSql = 'SELECT COUNT(*) AS cnt FROM ' + dbName + '.' + tableName;
+    var dbtype = _getDbtype(title);
     var dataSql = 'SELECT * FROM ' + dbName + '.' + tableName;
-    if (_dataSort.col) dataSql += ' ORDER BY `' + _dataSort.col + '` ' + _dataSort.dir;
-    dataSql += ' LIMIT ' + pageSize + ' OFFSET ' + ((page - 1) * pageSize);
+    if (_dataSort.col) dataSql += ' ORDER BY ' + _q(dbtype) + _dataSort.col + _q(dbtype) + ' ' + _dataSort.dir;
+    dataSql = _pageSql(dbtype, dataSql, pageSize, (page - 1) * pageSize);
     $.ajax({ url: "/webdb/db/mysql/executeQuery", type: "POST", contentType: "application/json", data: JSON.stringify({ title: title, sql: countSql }),
         success: function(countResult) {
             var total = 0;
@@ -24,7 +25,7 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
                     if (result.code === 0 && result.data && result.data.data && result.data.data.length > 0) {
                         var rows = result.data.data, duration = result.data.duration, cols = [];
                         for (var key in rows[0]) { if (rows[0].hasOwnProperty(key)) cols.push(key); }
-                        _dataCtx = { title: title, dbName: dbName, tableName: tableName, cols: cols };
+                        _dataCtx = { title: title, dbName: dbName, tableName: tableName, cols: cols, dbtype: dbtype };
                         var startIdx = (page - 1) * pageSize;
                         var html = '<div style="padding:5px 8px;font-size:13px;color:#666;border-bottom:1px solid #eee;">📊 ' + tableName + ' (共 ' + total + ' 行, ' + duration + ' 秒) <span style="color:#999;font-size:11px;">双击行可编辑</span></div>';
                         html += '<div style="overflow:auto;max-height:calc(100vh - 230px);"><table class="layui-table data-edit-table" lay-size="sm" style="margin:0;"><thead><tr>';
@@ -60,7 +61,7 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
                             success: function(colResult) {
                                 var cols = [];
                                 if (colResult.code === 0 && colResult.data) { colResult.data.forEach(function(c) { cols.push(c.colunmName); }); }
-                                _dataCtx = { title: title, dbName: dbName, tableName: tableName, cols: cols, rows: [] };
+                                _dataCtx = { title: title, dbName: dbName, tableName: tableName, cols: cols, rows: [], dbtype: dbtype };
                                 var html = '<div style="padding:5px 8px;font-size:13px;color:#666;border-bottom:1px solid #eee;">📊 ' + tableName + ' (共 0 行)</div>';
                                 html += '<div style="overflow:auto;max-height:calc(100vh - 230px);"><table class="layui-table data-edit-table" lay-size="sm" style="margin:0;"><thead><tr>';
                                 html += '<th style="white-space:nowrap;width:40px;color:#999;">#</th>';
@@ -144,13 +145,15 @@ function saveEditingRow($row) {
         else { $td.data('val', val).data('null', false).html(val); }
     });
     if (!changed) return;
+    var dbtype = _dataCtx.dbtype || 'mysql';
+    var q = _q(dbtype);
     var setClauses = [], whereClauses = [];
     cols.forEach(function(col) {
         var origVal = origRow[col], newVal = newValues[col], origStr = (origVal === null || origVal === undefined) ? '' : String(origVal);
-        if (newVal !== origStr) { setClauses.push(newVal === '' ? '`' + col + '` = NULL' : '`' + col + "` = '" + newVal.replace(/'/g, "\\'") + "'"); }
-        whereClauses.push(origVal === null || origVal === undefined ? '`' + col + '` IS NULL' : '`' + col + "` = '" + String(origVal).replace(/'/g, "\\'") + "'");
+        if (newVal !== origStr) { setClauses.push(newVal === '' ? q + col + q + ' = NULL' : q + col + q + " = '" + _escVal(dbtype, newVal) + "'"); }
+        whereClauses.push(origVal === null || origVal === undefined ? q + col + q + ' IS NULL' : q + col + q + " = '" + _escVal(dbtype, String(origVal)) + "'");
     });
-    var sql = 'UPDATE ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' SET ' + setClauses.join(', ') + ' WHERE ' + whereClauses.join(' AND ') + ' LIMIT 1';
+    var sql = _updateSql(dbtype, _dataCtx.dbName, _dataCtx.tableName, setClauses, whereClauses);
     $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json", data: JSON.stringify({ title: _dataCtx.title, sql: sql }),
         success: function(result) { if (result.code === 0) { cols.forEach(function(col) { origRow[col] = newValues[col] === '' ? null : newValues[col]; }); layer.msg('保存成功'); } else { layer.msg('保存失败: ' + (result.msg || '')); } },
         error: function() { layer.msg('请求失败'); }
@@ -208,8 +211,8 @@ function handleDataContextAction(action) {
         case 'ctx-copy-delimited': { var row = _dataCtx.rows[rowIdx]; if (!row) return; navigator.clipboard.writeText(_dataCtx.cols.map(function(c) { var v = row[c]; return v === null ? '' : String(v); }).join('\t')).then(function() { layer.msg('已复制'); }); } break;
         case 'ctx-copy-html': { var row = _dataCtx.rows[rowIdx]; if (!row) return; var h = '<table border="1"><tr>' + _dataCtx.cols.map(function(c) { return '<th>' + c + '</th>'; }).join('') + '</tr><tr>' + _dataCtx.cols.map(function(c) { return '<td>' + (row[c] === null ? '' : row[c]) + '</td>'; }).join('') + '</tr></table>'; navigator.clipboard.writeText(h).then(function() { layer.msg('已复制'); }); } break;
         case 'ctx-copy-insert': { copyRowAs('INSERT SQL', rowIdx); } break;
-        case 'ctx-copy-replace': { var row = _dataCtx.rows[rowIdx]; if (!row) return; var c = _dataCtx.cols.map(function(c) { return '`' + c + '`'; }).join(', '); var v = _dataCtx.cols.map(function(c) { var val = row[c]; return val === null ? 'NULL' : "'" + String(val).replace(/'/g, "\\'") + "'"; }).join(', '); navigator.clipboard.writeText('REPLACE INTO ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' (' + c + ') VALUES (' + v + ');').then(function() { layer.msg('已复制'); }); } break;
-        case 'ctx-copy-update': { var row = _dataCtx.rows[rowIdx]; if (!row) return; var s = _dataCtx.cols.map(function(c) { var v = row[c]; return '`' + c + '` = ' + (v === null ? 'NULL' : "'" + String(v).replace(/'/g, "\\'") + "'"); }).join(', '); navigator.clipboard.writeText('UPDATE ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' SET ' + s + ' WHERE 1=1;').then(function() { layer.msg('已复制'); }); } break;
+        case 'ctx-copy-replace': { var row = _dataCtx.rows[rowIdx]; if (!row) return; var dt = _dataCtx.dbtype || 'mysql'; var q = _q(dt); var c = _dataCtx.cols.map(function(c) { return q + c + q; }).join(', '); var v = _dataCtx.cols.map(function(c) { var val = row[c]; return val === null ? 'NULL' : "'" + _escVal(dt, String(val)) + "'"; }).join(', '); navigator.clipboard.writeText('REPLACE INTO ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' (' + c + ') VALUES (' + v + ');').then(function() { layer.msg('已复制'); }); } break;
+        case 'ctx-copy-update': { var row = _dataCtx.rows[rowIdx]; if (!row) return; var dt = _dataCtx.dbtype || 'mysql'; var q = _q(dt); var s = _dataCtx.cols.map(function(c) { var v = row[c]; return q + c + q + ' = ' + (v === null ? 'NULL' : "'" + _escVal(dt, String(v)) + "'"); }).join(', '); navigator.clipboard.writeText('UPDATE ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' SET ' + s + ' WHERE 1=1;').then(function() { layer.msg('已复制'); }); } break;
         case 'ctx-copy-json': { copyRowAs('JSON', rowIdx); } break;
         case 'ctx-copy-jsonline': { var row = _dataCtx.rows[rowIdx]; if (row) navigator.clipboard.writeText(JSON.stringify(row)).then(function() { layer.msg('已复制'); }); } break;
         case 'ctx-insert': { insertNewDataRow(rowIdx); } break;
@@ -217,7 +220,7 @@ function handleDataContextAction(action) {
         case 'ctx-copy-row-pk': { var row = _dataCtx.rows[rowIdx]; if (row) navigator.clipboard.writeText(JSON.stringify(row, null, 2)).then(function() { layer.msg('已复制(含主键)'); }); } break;
         case 'ctx-submit': { if ($row.hasClass('editing')) { saveEditingRow($row); } else { layer.msg('当前行未在编辑状态'); } } break;
         case 'ctx-cancel-edit': { if ($row.hasClass('editing')) { var origRow = _dataCtx.rows[rowIdx]; $row.removeClass('editing').css('background-color', ''); $row.find('td').each(function() { var $td = $(this), col = $td.data('col'); if (!col) return; var val = origRow[col], isNull = (val === null || val === undefined); $td.data('val', isNull ? '' : val).data('null', isNull).html(isNull ? '<span style="color:#ccc;">NULL</span>' : val); }); } } break;
-        case 'ctx-delete-row': { var row = _dataCtx.rows[rowIdx]; if (!row) return; layer.confirm('确定删除该行数据？', function(idx) { layer.close(idx); var w = []; _dataCtx.cols.forEach(function(col) { var v = row[col]; w.push(v === null || v === undefined ? '`' + col + '` IS NULL' : '`' + col + "` = '" + String(v).replace(/'/g, "\\'") + "'"); }); $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json", data: JSON.stringify({ title: _dataCtx.title, sql: 'DELETE FROM ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' WHERE ' + w.join(' AND ') + ' LIMIT 1' }), success: function(r) { if (r.code === 0) { layer.msg('已删除'); loadTableData(_dataCtx.title, _dataCtx.dbName, _dataCtx.tableName, _dataPager.page, _dataPager.pageSize); } else { layer.msg('删除失败: ' + (r.msg || '')); } }, error: function() { layer.msg('请求失败'); } }); }); } break;
+        case 'ctx-delete-row': { var row = _dataCtx.rows[rowIdx]; if (!row) return; layer.confirm('确定删除该行数据？', function(idx) { layer.close(idx); var dt = _dataCtx.dbtype || 'mysql'; var q = _q(dt); var w = []; _dataCtx.cols.forEach(function(col) { var v = row[col]; w.push(v === null || v === undefined ? q + col + q + ' IS NULL' : q + col + q + " = '" + _escVal(dt, String(v)) + "'"); }); $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json", data: JSON.stringify({ title: _dataCtx.title, sql: _deleteSql(dt, _dataCtx.dbName, _dataCtx.tableName, w) }), success: function(r) { if (r.code === 0) { layer.msg('已删除'); loadTableData(_dataCtx.title, _dataCtx.dbName, _dataCtx.tableName, _dataPager.page, _dataPager.pageSize); } else { layer.msg('删除失败: ' + (r.msg || '')); } }, error: function() { layer.msg('请求失败'); } }); }); } break;
         case 'ctx-export': { if (!_dataCtx.rows || !_dataCtx.cols) return; var csv = _dataCtx.cols.join(',') + '\n'; _dataCtx.rows.forEach(function(row) { csv += _dataCtx.cols.map(function(c) { var v = row[c]; if (v === null || v === undefined) return ''; var s = String(v); return (s.indexOf(',') > -1 || s.indexOf('"') > -1) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',') + '\n'; }); var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = _dataCtx.tableName + '.csv'; a.click(); layer.msg('已导出'); } break;
         case 'ctx-refresh': { loadTableData(_dataCtx.title, _dataCtx.dbName, _dataCtx.tableName, _dataPager.page, _dataPager.pageSize); } break;
     }
@@ -225,10 +228,12 @@ function handleDataContextAction(action) {
 
 function copyRowAs(format, rowIdx) {
     var row = _dataCtx.rows[rowIdx]; if (!row) return;
+    var dt = _dataCtx.dbtype || 'mysql';
+    var q = _q(dt);
     var text = '';
     if (format === 'JSON') text = JSON.stringify(row, null, 2);
     else if (format === 'CSV') { text = _dataCtx.cols.join(',') + '\n' + _dataCtx.cols.map(function(c) { var v = row[c]; return v === null ? '' : String(v); }).join(','); }
-    else if (format === 'INSERT SQL') { var cols = _dataCtx.cols.map(function(c) { return '`' + c + '`'; }).join(', '); var vals = _dataCtx.cols.map(function(c) { var v = row[c]; return v === null || v === undefined ? 'NULL' : "'" + String(v).replace(/'/g, "\\'") + "'"; }).join(', '); text = 'INSERT INTO ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' (' + cols + ') VALUES (' + vals + ');'; }
+    else if (format === 'INSERT SQL') { var cols = _dataCtx.cols.map(function(c) { return q + c + q; }).join(', '); var vals = _dataCtx.cols.map(function(c) { var v = row[c]; return v === null || v === undefined ? 'NULL' : "'" + _escVal(dt, String(v)) + "'"; }).join(', '); text = 'INSERT INTO ' + _dataCtx.dbName + '.' + _dataCtx.tableName + ' (' + cols + ') VALUES (' + vals + ');'; }
     navigator.clipboard.writeText(text).then(function() { layer.msg('已复制为 ' + format); });
 }
 
@@ -273,11 +278,13 @@ function saveNewRow($row) {
     if (!hasValue) { $row.remove(); return; }
 
     var colNames = [], colValues = [];
+    var dbtype = _dataCtx.dbtype || 'mysql';
+    var q = _q(dbtype);
     cols.forEach(function(col) {
         var val = values[col];
         if (val !== undefined && val !== '') {
-            colNames.push('`' + col + '`');
-            colValues.push("'" + val.replace(/'/g, "\\'") + "'");
+            colNames.push(q + col + q);
+            colValues.push("'" + _escVal(dbtype, val) + "'");
         }
     });
     if (colNames.length === 0) { $row.remove(); return; }

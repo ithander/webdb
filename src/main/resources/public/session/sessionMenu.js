@@ -60,7 +60,7 @@ function showSessionContextMenu(e, items, treeNode, treeId) {
         $('#sessionContextMenu').remove();
         handleSessionMenuAction(action);
     });
-    setTimeout(function() { $(document).one('click', function() { $('#sessionContextMenu').remove(); }); }, 0);
+    setTimeout(function() { $(document).on('click.sessMenu', function(e) { if (!$(e.target).closest('#sessionContextMenu').length) { $('#sessionContextMenu').remove(); $(document).off('click.sessMenu'); } }); }, 0);
 }
 
 function handleSessionMenuAction(action) {
@@ -87,8 +87,12 @@ function handleSessionMenuAction(action) {
             } else if (node.level === 2) {
                 layer.confirm('确定删除表 <b>' + node.tableName + '</b> ？此操作不可恢复！', function(idx) {
                     layer.close(idx);
+                    var dt = node.dbtype || '';
+                    var dropSql = (dt === 'pg') ? 'DROP TABLE ' + node.dbName + '.' + node.tableName + ' CASCADE'
+                                : (dt === 'oracle') ? 'DROP TABLE ' + node.dbName + '.' + node.tableName + ' CASCADE CONSTRAINTS'
+                                : 'DROP TABLE ' + node.dbName + '.' + node.tableName;
                     $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json",
-                        data: JSON.stringify({ title: node.title, sql: 'DROP TABLE ' + node.dbName + '.' + node.tableName }),
+                        data: JSON.stringify({ title: node.title, sql: dropSql }),
                         success: function(r) {
                             if (r.code === 0) { layer.msg('表已删除'); var zTree = $.fn.zTree.getZTreeObj(ctx.treeId); if (zTree) zTree.removeNode(node); }
                             else { layer.msg('删除失败: ' + (r.msg || '')); }
@@ -114,11 +118,12 @@ function handleSessionMenuAction(action) {
         case 'menu-create':
             var dbName = node.level === 1 ? node.dbName : (node.level === 2 ? node.dbName : '');
             var title = node.title;
+            var dbtype = node.dbtype || '';
             if (!dbName) { layer.msg('请选择数据库'); return; }
             layer.prompt({ title: '创建表 - 输入表名', formType: 0 }, function(tableName, idx) {
                 layer.close(idx);
                 if (!tableName || !tableName.trim()) return;
-                var sql = 'CREATE TABLE ' + dbName + '.' + tableName.trim() + ' (id INT PRIMARY KEY AUTO_INCREMENT)';
+                var sql = _createTableSql(dbtype, dbName, tableName.trim());
                 $.ajax({ url: "/webdb/db/mysql/executeUpdate", type: "POST", contentType: "application/json",
                     data: JSON.stringify({ title: title, sql: sql }),
                     success: function(r) {

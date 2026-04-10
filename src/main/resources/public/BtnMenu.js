@@ -184,9 +184,10 @@ function toggleExportMenu() {
         e.stopPropagation();
         var format = $(this).data('format');
         $('#toolbarExportMenu').remove();
+        $(document).off('click.exportMenu');
         doToolbarExport(format);
     });
-    setTimeout(function() { $(document).one('click', function() { $('#toolbarExportMenu').remove(); }); }, 0);
+    setTimeout(function() { $(document).on('click.exportMenu', function(e) { if (!$(e.target).closest('#toolbarExportMenu').length) { $('#toolbarExportMenu').remove(); $(document).off('click.exportMenu'); } }); }, 0);
 }
 
 function doToolbarExport(format) {
@@ -222,9 +223,11 @@ function doToolbarExport(format) {
         rows.forEach(function(row) { content += JSON.stringify(row) + '\n'; });
         filename += '.json'; mime = 'application/x-ndjson;charset=utf-8';
     } else if (format === 'sql-insert') {
+        var dt = (_dataCtx && _dataCtx.dbtype) ? _dataCtx.dbtype : 'mysql';
+        var q = _q(dt);
         rows.forEach(function(row) {
-            var c = cols.map(function(c) { return '`' + c + '`'; }).join(', ');
-            var v = cols.map(function(c) { var val = row[c]; return val === null || val === undefined ? 'NULL' : "'" + String(val).replace(/'/g, "\\'") + "'"; }).join(', ');
+            var c = cols.map(function(c) { return q + c + q; }).join(', ');
+            var v = cols.map(function(c) { var val = row[c]; return val === null || val === undefined ? 'NULL' : "'" + _escVal(dt, String(val)) + "'"; }).join(', ');
             content += 'INSERT INTO ' + sqlTableName + ' (' + c + ') VALUES (' + v + ');\n';
         });
         filename += '.sql';
