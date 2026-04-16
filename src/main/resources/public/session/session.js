@@ -190,7 +190,7 @@ function loadColumns(zTree, parentNode) {
 
 function editSession(title) {
     layer.open({
-        type: 2, title: '编辑会话 - ' + title, shadeClose: true, area: ['550px', '420px'],
+        type: 2, title: '编辑会话 - ' + title, shadeClose: true, area: ['550px', '520px'],
         content: '/webdb/config/form?title=' + encodeURIComponent(title),
         btn: ['保存', '取消'],
         yes: function(index) {

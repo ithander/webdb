@@ -44,10 +44,6 @@ function runQuery() {
                     window['_qryData_' + activeTab] = { rows: rows, cols: cols, $result: $result, sql: sql };
                     window._lastQueryRows = rows; window._lastQueryCols = cols; window._lastQuerySql = sql;
                     renderQueryPage(activeTab, 1, 50);
-                    $result.find('.qry-pager-box').attr('id', pagerId);
-                    layui.laypage.render({ elem: pagerId, count: rows.length, curr: 1, limit: 50, limits: [50, 100, 200, 500], layout: ['count', 'prev', 'page', 'next', 'limit', 'skip'],
-                        jump: function(obj, first) { if (!first) renderQueryPage(activeTab, obj.curr, obj.limit); }
-                    });
                     bindQueryExportBtn(activeTab, rows, cols);
                     if (typeof updateExportBtn === 'function') updateExportBtn();
                 } else {
@@ -65,6 +61,7 @@ function renderQueryPage(activeTab, page, pageSize) {
     var data = window['_qryData_' + activeTab]; if (!data) return;
     var rows = data.rows, cols = data.cols, $result = data.$result;
     var start = (page - 1) * pageSize, end = Math.min(start + pageSize, rows.length), pageRows = rows.slice(start, end);
+    var pagerId = 'qryPager-' + (activeTab || 'query');
     var html = '<div style="overflow:auto;max-height:calc(100vh - 320px);"><table class="layui-table qry-result-table" lay-size="sm" style="margin:0;"><thead><tr>';
     html += '<th style="white-space:nowrap;width:40px;color:#999;">#</th>';
     cols.forEach(function(col) { html += '<th style="white-space:nowrap;">' + col + '</th>'; });
@@ -79,8 +76,12 @@ function renderQueryPage(activeTab, page, pageSize) {
         });
         html += '</tr>';
     });
-    html += '</tbody></table></div><div class="qry-pager-box" style="padding:5px 8px;border-top:1px solid #eee;"></div>';
+    html += '</tbody></table></div><div id="' + pagerId + '" class="qry-pager-box" style="padding:5px 8px;border-top:1px solid #eee;"></div>';
     $result.html(html);
+    // 重新渲染分页
+    layui.laypage.render({ elem: pagerId, count: rows.length, curr: page, limit: pageSize, limits: [50, 100, 200, 500], layout: ['count', 'prev', 'page', 'next', 'limit', 'skip'],
+        jump: function(obj, first) { if (!first) renderQueryPage(activeTab, obj.curr, obj.limit); }
+    });
     // 右键菜单
     $result.find('.qry-result-table tbody').on('contextmenu', 'td', function(e) {
         e.preventDefault();

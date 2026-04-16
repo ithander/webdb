@@ -116,8 +116,13 @@
 		if(!$('#id').val()||$('#id').val()<=0){
 							setupDefaultPort(dbtype);
 						}
+		// 设置 dbtype 下拉框选中值
+		$('#dbtype').val(dbtype);
+		form.render('select');
 	  }
 	
+	
+	var originalTitle = "${info.title!}";
 	
 	parent.saveForm = function () {
 		var formOK = form.validate('#title') && form.validate('#host') && form.validate('#port') && form.validate('#uname') && form.validate('#upass');
@@ -130,7 +135,7 @@
 		}
 
 		var cfg = {
-			id: Date.now(),
+			id: parseInt($('#id').val()) || Date.now(),
 			title: $.trim($('#title').val()),
 			host: $.trim($('#host').val()),
 			uname: $.trim($('#uname').val()),
@@ -144,8 +149,14 @@
 		// 存到 localStorage
 		var configs = parent.WebdbCrypto ? parent.WebdbCrypto.loadConfigs() : JSON.parse(localStorage.getItem('webdb_configs') || '[]');
 		var existIdx = -1;
-		configs.forEach(function(c, i) { if (c.title === cfg.title) existIdx = i; });
+		// 用原始 title 查找，支持修改会话名称
+		var matchTitle = originalTitle || cfg.title;
+		configs.forEach(function(c, i) { if (c.title === matchTitle) existIdx = i; });
 		if (existIdx >= 0) {
+			// 如果改了 title，先删除后端旧的
+			if (originalTitle && originalTitle !== cfg.title) {
+				$.ajax({ url: '/webdb/config/del', type: 'POST', contentType: 'application/json', data: JSON.stringify({ title: originalTitle }), async: false });
+			}
 			configs[existIdx] = cfg;
 		} else {
 			configs.push(cfg);

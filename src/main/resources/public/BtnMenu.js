@@ -43,7 +43,7 @@ function bindKeyboardShortcuts() {
 // 新增会话
 function openSessionManager() {
     layer.open({
-        type: 2, title: '新增数据库配置', shadeClose: true, area: ['550px', '420px'], content: '/webdb/config/form',
+        type: 2, title: '新增数据库配置', shadeClose: true, area: ['550px', '520px'], content: '/webdb/config/form',
         btn: ['保存', '取消'],
         yes: function(index) {
             if (window.saveForm) {

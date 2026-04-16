@@ -16,7 +16,12 @@ var SESSION_MENU = [
 var DATABASE_MENU = [
     { id: 'menu-create', text: '创建表...', icon: '➕' },
     { type: 'sep' },
-    { id: 'menu-export', text: '导出', icon: '📥' },
+    { id: 'menu-export', text: '导出', icon: '📥', children: [
+        { id: 'menu-export-csv', text: 'Excel CSV' },
+        { id: 'menu-export-json', text: 'JSON' },
+        { id: 'menu-export-jsonline', text: 'JSON Line' },
+        { id: 'menu-export-sql', text: 'SQL Inserts' }
+    ]},
     { type: 'sep' },
     { id: 'menu-refresh', text: '刷新', icon: '🔄' }
 ];
@@ -27,7 +32,12 @@ var TABLE_MENU = [
     { id: 'menu-truncate', text: '清空表', icon: '⚠️' },
     { id: 'menu-create', text: '创建表...', icon: '➕' },
     { type: 'sep' },
-    { id: 'menu-export', text: '导出', icon: '📥' },
+    { id: 'menu-export', text: '导出', icon: '📥', children: [
+        { id: 'menu-export-csv', text: 'Excel CSV' },
+        { id: 'menu-export-json', text: 'JSON' },
+        { id: 'menu-export-jsonline', text: 'JSON Line' },
+        { id: 'menu-export-sql', text: 'SQL Inserts' }
+    ]},
     { type: 'sep' },
     { id: 'menu-refresh', text: '刷新', icon: '🔄' }
 ];
@@ -36,6 +46,16 @@ function buildMenuHtml(items) {
     var html = '<div id="sessionContextMenu" style="display:none;position:fixed;z-index:99999;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:2px 2px 8px rgba(0,0,0,0.15);min-width:160px;padding:4px 0;font-size:13px;">';
     items.forEach(function(item) {
         if (item.type === 'sep') { html += '<div style="border-top:1px solid #eee;margin:4px 0;"></div>'; }
+        else if (item.children) {
+            html += '<div class="sess-menu-item sess-has-sub" style="padding:6px 15px;cursor:pointer;display:flex;align-items:center;gap:8px;justify-content:space-between;position:relative;">';
+            html += '<span style="display:flex;align-items:center;gap:8px;"><span style="width:18px;text-align:center;">' + (item.icon || '') + '</span><span>' + item.text + '</span></span><span style="color:#999;">▶</span>';
+            html += '<div class="sess-submenu" style="display:none;position:absolute;left:100%;top:-4px;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:2px 2px 8px rgba(0,0,0,0.15);min-width:140px;padding:4px 0;z-index:100000;">';
+            item.children.forEach(function(sub) {
+                if (sub.type === 'sep') html += '<div style="border-top:1px solid #eee;margin:4px 0;"></div>';
+                else html += '<div class="sess-menu-item sess-sub-item" data-action="' + sub.id + '" style="padding:6px 15px;cursor:pointer;white-space:nowrap;">' + sub.text + '</div>';
+            });
+            html += '</div></div>';
+        }
         else { html += '<div class="sess-menu-item" data-action="' + item.id + '" style="padding:6px 15px;cursor:pointer;display:flex;align-items:center;gap:8px;"><span style="width:18px;text-align:center;">' + (item.icon || '') + '</span><span>' + item.text + '</span></div>'; }
     });
     html += '</div>';
@@ -55,9 +75,12 @@ function showSessionContextMenu(e, items, treeNode, treeId) {
     if (top + $menu.outerHeight() > $(window).height()) top = $(window).height() - $menu.outerHeight() - 5;
     $menu.css({ left: left, top: top });
     $('.sess-menu-item').on('mouseenter', function() { $(this).css('background', '#f0f0f0'); }).on('mouseleave', function() { $(this).css('background', ''); });
-    $('.sess-menu-item').on('click', function() {
+    $('.sess-has-sub').on('mouseenter', function() { $(this).find('.sess-submenu').show(); }).on('mouseleave', function() { $(this).find('.sess-submenu').hide(); });
+    $('.sess-menu-item').on('click', function(e) {
         var action = $(this).data('action');
+        if (!action) return; // 父菜单项无 action，忽略
         $('#sessionContextMenu').remove();
+        $(document).off('click.sessMenu');
         handleSessionMenuAction(action);
     });
     setTimeout(function() { $(document).on('click.sessMenu', function(e) { if (!$(e.target).closest('#sessionContextMenu').length) { $('#sessionContextMenu').remove(); $(document).off('click.sessMenu'); } }); }, 0);
@@ -133,14 +156,15 @@ function handleSessionMenuAction(action) {
                 });
             });
             break;
-        case 'menu-export':
+        case 'menu-export-csv':
+        case 'menu-export-json':
+        case 'menu-export-jsonline':
+        case 'menu-export-sql':
+            var fmt = action.replace('menu-export-', '');
             if (node.level === 2 && node.tableName) {
-                currentTable = node.tableName;
-                switchTab('data');
-                loadTableData(node.title, node.dbName, node.tableName);
-                setTimeout(function() { if (typeof toggleExportMenu === 'function') toggleExportMenu(); }, 500);
-            } else if (node.level === 0) {
-                layer.msg('请选择具体的表进行导出');
+                _exportTableData(node.title, node.dbName, node.tableName, fmt);
+            } else if (node.level === 1 && node.dbName) {
+                _exportAllTables(node.title, node.dbName, fmt);
             }
             break;
         case 'menu-refresh':
@@ -203,5 +227,101 @@ function bindSessionTreeContextMenu() {
         if (node.level === 0) showSessionContextMenu(e, SESSION_MENU, node, 'sessionTree');
         else if (node.level === 1) showSessionContextMenu(e, DATABASE_MENU, node, 'sessionTree');
         else if (node.level === 2) showSessionContextMenu(e, TABLE_MENU, node, 'sessionTree');
+    });
+}
+
+// ========== 导出功能 ==========
+function _formatExportContent(rows, cols, tableName, format, dbtype) {
+    var q = _q(dbtype || 'mysql');
+    var content = '', filename = tableName, mime = 'text/plain';
+    if (format === 'csv') {
+        content = '\uFEFF' + cols.join(',') + '\n';
+        rows.forEach(function(row) {
+            content += cols.map(function(c) { var v = row[c]; if (v === null || v === undefined) return ''; var s = String(v); return (s.indexOf(',') > -1 || s.indexOf('"') > -1) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',') + '\n';
+        });
+        filename += '.csv'; mime = 'text/csv;charset=utf-8';
+    } else if (format === 'json') {
+        content = JSON.stringify(rows, null, 2);
+        filename += '.json'; mime = 'application/json;charset=utf-8';
+    } else if (format === 'jsonline') {
+        rows.forEach(function(row) { content += JSON.stringify(row) + '\n'; });
+        filename += '.jsonl'; mime = 'application/x-ndjson;charset=utf-8';
+    } else if (format === 'sql') {
+        rows.forEach(function(row) {
+            var c = cols.map(function(c) { return q + c + q; }).join(', ');
+            var v = cols.map(function(c) { var val = row[c]; return val === null || val === undefined ? 'NULL' : "'" + _escVal(dbtype || 'mysql', String(val)) + "'"; }).join(', ');
+            content += 'INSERT INTO ' + tableName + ' (' + c + ') VALUES (' + v + ');\n';
+        });
+        filename += '.sql';
+    }
+    return { content: content, filename: filename, mime: mime };
+}
+
+function _downloadContent(content, filename, mime) {
+    var blob = new Blob([content], { type: mime || 'text/plain' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+}
+
+function _exportTableData(title, dbName, tableName, format) {
+    var loadIdx = layer.load(1, { shade: [0.3, '#000'] });
+    var sql = 'SELECT * FROM ' + dbName + '.' + tableName;
+    $.ajax({ url: "/webdb/db/mysql/executeQuery", type: "POST", contentType: "application/json",
+        data: JSON.stringify({ title: title, sql: sql }),
+        success: function(result) {
+            layer.close(loadIdx);
+            if (result.code === 0 && result.data && result.data.data && result.data.data.length > 0) {
+                var rows = result.data.data;
+                var cols = []; for (var key in rows[0]) { if (rows[0].hasOwnProperty(key)) cols.push(key); }
+                var dbtype = _getDbtype(title);
+                var out = _formatExportContent(rows, cols, tableName, format, dbtype);
+                _downloadContent(out.content, out.filename, out.mime);
+                layer.msg('已导出: ' + out.filename);
+            } else { layer.msg('表中没有数据'); }
+        },
+        error: function() { layer.close(loadIdx); layer.msg('请求失败'); }
+    });
+}
+
+function _exportAllTables(title, dbName, format) {
+    var loadIdx = layer.load(1, { shade: [0.3, '#000'] });
+    // 先获取所有表名
+    $.ajax({ url: "/webdb/session/tables", type: "GET", data: { title: title, dbName: dbName },
+        success: function(result) {
+            if (result.code !== 0 || !result.data || result.data.length === 0) {
+                layer.close(loadIdx); layer.msg('没有可导出的表'); return;
+            }
+            var tables = result.data.map(function(t) { return t.tableName; });
+            var dbtype = _getDbtype(title);
+            var q = _q(dbtype);
+            var allContent = '', done = 0, total = tables.length;
+
+            tables.forEach(function(tbl) {
+                var sql = 'SELECT * FROM ' + dbName + '.' + tbl;
+                $.ajax({ url: "/webdb/db/mysql/executeQuery", type: "POST", contentType: "application/json",
+                    data: JSON.stringify({ title: title, sql: sql }),
+                    success: function(r) {
+                        if (r.code === 0 && r.data && r.data.data && r.data.data.length > 0) {
+                            var rows = r.data.data;
+                            var cols = []; for (var key in rows[0]) { if (rows[0].hasOwnProperty(key)) cols.push(key); }
+                            var out = _formatExportContent(rows, cols, tbl, format, dbtype);
+                            if (format === 'sql') { allContent += '-- Table: ' + tbl + '\n' + out.content + '\n'; }
+                            else if (format === 'json') { allContent += '"' + tbl + '": ' + JSON.stringify(rows, null, 2) + ',\n'; }
+                            else { allContent += '-- ' + tbl + '\n' + out.content + '\n'; }
+                        }
+                        done++;
+                        if (done === total) {
+                            layer.close(loadIdx);
+                            if (!allContent) { layer.msg('所有表均为空'); return; }
+                            var ext = format === 'csv' ? '.csv' : format === 'json' ? '.json' : format === 'jsonline' ? '.jsonl' : '.sql';
+                            if (format === 'json') allContent = '{\n' + allContent.replace(/,\n$/, '\n') + '}';
+                            _downloadContent(format === 'csv' ? '\uFEFF' + allContent : allContent, dbName + ext);
+                            layer.msg('已导出: ' + dbName + ext);
+                        }
+                    },
+                    error: function() { done++; if (done === total) { layer.close(loadIdx); if (allContent) { var ext = format === 'csv' ? '.csv' : format === 'json' ? '.json' : format === 'jsonline' ? '.jsonl' : '.sql'; _downloadContent(allContent, dbName + ext); } else { layer.msg('导出失败'); } } }
+                });
+            });
+        },
+        error: function() { layer.close(loadIdx); layer.msg('获取表列表失败'); }
     });
 }
