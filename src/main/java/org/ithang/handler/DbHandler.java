@@ -114,7 +114,13 @@ public abstract class DbHandler {
 	}
 	
 	public boolean testConnect() {
-		return false;
+		try {
+			// 尝试获取一个连接来测试连接是否正常
+			dataSource.getConnection().close();
+			return true;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 	
 		

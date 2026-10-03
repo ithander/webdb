@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试新增会话功能</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <h1>测试新增会话功能</h1>
+    <p>请访问以下地址进行测试：</p>
+    <ul>
+        <li><a href="http://localhost:9866/webdb" target="_blank">主页面</a></li>
+        <li><strong>测试步骤：</strong></li>
+        <li>1. 点击"文件"菜单</li>
+        <li>2. 选择"会话管理器"</li>
+        <li>3. 在弹出的会话管理界面中，检查左上角是否有"新增会话"按钮</li>
+        <li>4. 点击"新增会话"按钮</li>
+        <li>5. 确认弹出的页面与"新增数据库配置"页面相同</li>
+    </ul>
+    
+    <div id="test-results">
+        <h2>修改总结：</h2>
+        <div class="test-result success">
+            <strong>修改1完成：</strong> 在会话管理界面的左上角添加了"新增会话"按钮
+        </div>
+        <div class="test-result success">
+            <strong>修改2完成：</strong> 按钮调用<code>showNewSessionDialog()</code>函数
+        </div>
+        <div class="test-result success">
+            <strong>修改3完成：</strong> <code>showNewSessionDialog()</code>函数现在使用最早的弹框方法，加载<code>/webdb/config/form</code>页面
+        </div>
+        <div class="test-result success">
+            <strong>修改4完成：</strong> 弹出的页面与"新增数据库配置"页面（configForm.html）相同
+        </div>
+    </div>
+    
+    <h3>关键代码修改：</h3>
+    <pre>
+    1. buildConfigListHtml()函数中新增了"新增会话"按钮：
+       button onclick="showNewSessionDialog()"
+       
+    2. showNewSessionDialog()函数修改为：
+       - 使用 layer.open({ type: 2, ... })
+       - 加载 /webdb/config/form
+       - 与BtnMenu.js中的openSessionManager()保持一致
+       
+    3. 所有"新增会话"按钮现在都调用同一个弹框方法
+    </pre>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SQL格式化功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        code { background: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-family: Consolas, monospace; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>SQL格式化功能测试</h1>
+    
+    <div class="test-result info">
+        <strong>访问地址：</strong> <a href="http://localhost:9866/webdb" target="_blank">http://localhost:9866/webdb</a>
+    </div>
+    
+    <h3>测试步骤：</h3>
+    <ol>
+        <li>访问主页面</li>
+        <li>切换到查询tab（可以是主查询或新建查询）</li>
+        <li>输入未格式化的SQL，例如：</li>
+        <pre>SELECT id,name,email FROM users WHERE status=1 AND deleted=0 ORDER BY created_at DESC</pre>
+        <li>点击"编辑"菜单 → "SQL格式化"</li>
+        <li>检查SQL是否被正确格式化</li>
+    </ol>
+    
+    <h3>修改内容总结：</h3>
+    <div class="test-result success">
+        <strong>修改1完成：</strong> 修改了<code>editMenu.js</code>文件，实现了SQL格式化功能
+    </div>
+    <div class="test-result success">
+        <strong>修改2完成：</strong> 添加了<code>formatSql()</code>函数，处理点击事件
+    </div>
+    <div class="test-result success">
+        <strong>修改3完成：</strong> 添加了<code>formatSqlText()</code>函数，实现SQL格式化逻辑
+    </div>
+    <div class="test-result success">
+        <strong>修改4完成：</strong> 支持主查询tab（ID: query）和新建查询tab（ID: query-1, query-2等）
+    </div>
+    
+    <h3>SQL格式化功能特性：</h3>
+    <ul>
+        <li><strong>自动检测当前活动tab：</strong> 检查<code>.tab-item.active</code></li>
+        <li><strong>支持两种查询tab：</strong> 主查询(<code>#sqlInput</code>)和新建查询(<code>.sqlInput[data-tab]</code>)</li>
+        <li><strong>验证检查：</strong> 检查是否在查询tab中、SQL是否为空</li>
+        <li><strong>基本格式化规则：</strong>
+            <ul>
+                <li>统一换行符</li>
+                <li>SQL关键字前添加换行</li>
+                <li>SELECT子句中的逗号后换行和缩进</li>
+                <li>自动缩进处理</li>
+                <li>清理多余空行</li>
+            </ul>
+        </li>
+        <li><strong>错误处理：</strong> 友好的错误提示信息</li>
+        <li><strong>成功反馈：</strong> 显示"SQL格式化成功"消息</li>
+    </ul>
+    
+    <h3>支持的SQL关键字：</h3>
+    <pre>SELECT, FROM, WHERE, JOIN, LEFT JOIN, RIGHT JOIN, INNER JOIN,
+GROUP BY, ORDER BY, HAVING, UNION, UNION ALL, INSERT INTO,
+UPDATE, DELETE FROM, CREATE TABLE, ALTER TABLE, DROP TABLE</pre>
+    
+    <h3>格式化示例：</h3>
+    
+    <h4>输入（未格式化）：</h4>
+    <pre>SELECT id,name,email FROM users WHERE status=1 AND deleted=0 ORDER BY created_at DESC</pre>
+    
+    <h4>输出（格式化后）：</h4>
+    <pre>SELECT
+    id,
+    name,
+    email
+FROM users
+WHERE status=1
+    AND deleted=0
+ORDER BY created_at DESC</pre>
+    
+    <h3>代码结构：</h3>
+    <div class="test-result info">
+        <strong>文件：</strong> <code>c:\work\webdb\src\main\resources\public\editMenu.js</code>
+        <p><strong>主要函数：</strong></p>
+        <ul>
+            <li><code>formatSql()</code> - 处理菜单点击，获取当前SQL并调用格式化</li>
+            <li><code>formatSqlText(sql)</code> - 核心格式化逻辑</li>
+        </ul>
+    </div>
+    
+    <h3>注意事项：</h3>
+    <ul>
+        <li>需要确保用户已经切换到查询tab</li>
+        <li>SQL不能为空</li>
+        <li>格式化功能是基本的，对于复杂的嵌套SQL可能有限</li>
+        <li>使用layer显示提示消息，需要确保layer已加载</li>
+    </ul>
+</body>
+</html>
+
+    
+    <h3>新增功能：两种格式化模式</h3>
+    <div class="test-result success">
+        <strong>新增功能：</strong> 现在提供两种SQL格式化模式
+    </div>
+    
+    <h4>基本模式：</h4>
+    <ul>
+        <li>快速格式化</li>
+        <li>主要关键字前添加换行</li>
+        <li>SELECT子句逗号后换行</li>
+        <li>基本缩进处理</li>
+        <li>适合快速整理简单SQL</li>
+    </ul>
+    
+    <h4>高级模式：</h4>
+    <ul>
+        <li>完整格式化功能</li>
+        <li>支持更多SQL关键字</li>
+        <li>处理括号缩进</li>
+        <li>VALUES子句格式化</li>
+        <li>复杂的缩进逻辑</li>
+        <li>适合复杂的嵌套SQL</li>
+    </ul>
+    
+    <h3>测试方法更新：</h3>
+    <ol>
+        <li>切换到查询tab</li>
+        <li>输入SQL语句</li>
+        <li>点击"编辑"菜单</li>
+        <li>选择"SQL格式化（基本）"或"SQL格式化（高级）"</li>
+        <li>检查格式化结果</li>
+    </ol>

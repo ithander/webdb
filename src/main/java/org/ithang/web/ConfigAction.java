@@ -78,4 +78,58 @@ public class ConfigAction {
         configService.syncAll(infos);
         return Map.of("code", 0, "msg", "success");
     }
+
+    @ResponseBody
+    @PostMapping("add")
+    public Map<String, Object> add(@RequestBody DBInfo info) {
+        if (StrUtil.isBlank(info.getTitle())) {
+            return Map.of("code", 1, "msg", "会话名称不能为空");
+        }
+        if (configService.hasInfo(info.getTitle())) {
+            return Map.of("code", 1, "msg", "会话名称已存在");
+        }
+        handlerFactory.delHandler(info.getTitle());
+        configService.save(info);
+        return Map.of("code", 0, "msg", "success");
+    }
+
+    @ResponseBody
+    @PostMapping("update")
+    public Map<String, Object> update(@RequestBody Map<String, Object> params) {
+        String oldTitle = (String) params.get("oldTitle");
+        DBInfo newConfig = (DBInfo) params.get("newConfig");
+        
+        if (StrUtil.isBlank(oldTitle) || newConfig == null || StrUtil.isBlank(newConfig.getTitle())) {
+            return Map.of("code", 1, "msg", "参数错误");
+        }
+        
+        // 如果修改了会话名称，需要删除旧的
+        if (!oldTitle.equals(newConfig.getTitle())) {
+            handlerFactory.delHandler(oldTitle);
+            configService.delete(oldTitle);
+        }
+        
+        // 保存新的配置
+        handlerFactory.delHandler(newConfig.getTitle());
+        configService.save(newConfig);
+        
+        return Map.of("code", 0, "msg", "success");
+    }
+
+    @ResponseBody
+    @PostMapping("test")
+    public Map<String, Object> testConnection(@RequestBody DBInfo info) {
+        try {
+            // 创建一个临时的 handler 来测试连接
+            var handler = handlerFactory.createHandler(info);
+            if (handler != null && handler.testConnect()) {
+                return Map.of("code", 0, "msg", "连接成功");
+            } else {
+                return Map.of("code", 1, "msg", "连接失败");
+            }
+        } catch (Exception e) {
+            log.error("测试连接失败: {}", e.getMessage(), e);
+            return Map.of("code", 1, "msg", "连接失败: " + e.getMessage());
+        }
+    }
 }

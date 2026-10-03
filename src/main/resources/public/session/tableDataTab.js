@@ -3,6 +3,64 @@ var _dataCtx = {};
 var _dataPager = { page: 1, pageSize: 50, total: 0 };
 var _dataSort = { col: null, dir: null }; // 排序状态: col=列名, dir='ASC'|'DESC'|null
 
+// 添加列宽调整和行高亮样式
+$(function() {
+    var style = document.createElement('style');
+    style.textContent = `
+        .resizing-cursor {
+            cursor: col-resize !important;
+            user-select: none !important;
+        }
+        .resizing-column {
+            background-color: #f0f0f0 !important;
+            box-shadow: 0 0 3px rgba(0,0,0,0.2) !important;
+        }
+        .column-resizer {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            cursor: col-resize;
+            z-index: 10;
+            background-color: transparent;
+        }
+        .column-resizer:hover {
+            background-color: rgba(64, 158, 255, 0.5);
+        }
+        .column-resizer.active {
+            background-color: rgba(64, 158, 255, 0.8);
+        }
+        .data-edit-table {
+            table-layout: auto;
+        }
+        .data-edit-table.fixed-layout {
+            table-layout: fixed;
+        }
+        /* 行高亮样式 */
+        .data-edit-table tbody tr.row-highlight {
+            background-color: #e6f7ff !important;
+            box-shadow: 0 0 5px rgba(64, 158, 255, 0.3);
+            position: relative;
+        }
+        .data-edit-table tbody tr.row-highlight td {
+            border-color: rgba(64, 158, 255, 0.3) !important;
+        }
+        .data-edit-table tbody tr.row-highlight:hover {
+            background-color: #d6e7ff !important;
+        }
+        /* 编辑状态行样式 */
+        .data-edit-table tbody tr.editing {
+            background-color: #fffbe6 !important;
+        }
+        /* 新增行样式 */
+        .data-edit-table tbody tr.new-row {
+            background-color: #f0fff0 !important;
+        }
+    `;
+    document.head.appendChild(style);
+});
+
 function loadTableData(title, dbName, tableName, page, pageSize) {
     page = page || 1;
     pageSize = pageSize || _dataPager.pageSize || 50;
@@ -29,11 +87,17 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
                         var startIdx = (page - 1) * pageSize;
                         var html = '<div style="padding:5px 8px;font-size:13px;color:#666;border-bottom:1px solid #eee;">📊 ' + tableName + ' (共 ' + total + ' 行, ' + duration + ' 秒) <span style="color:#999;font-size:11px;">双击行可编辑</span></div>';
                         html += '<div style="overflow:auto;max-height:calc(100vh - 230px);"><table class="layui-table data-edit-table" lay-size="sm" style="margin:0;"><thead><tr>';
-                        html += '<th style="white-space:nowrap;width:40px;color:#999;">#</th>';
+                        html += '<th style="white-space:nowrap;width:40px;color:#999;position:relative;">#</th>';
                         cols.forEach(function(col) {
-                            var arrow = '', style = 'white-space:nowrap;cursor:pointer;user-select:none;';
+                            var arrow = '', style = 'white-space:nowrap;cursor:pointer;user-select:none;position:relative;';
                             if (_dataSort.col === col) { arrow = _dataSort.dir === 'ASC' ? ' ▲' : ' ▼'; style += 'color:#409eff;'; }
-                            html += '<th data-sort-col="' + col + '" style="' + style + '">' + col + '<span style="font-size:10px;">' + arrow + '</span></th>';
+                            html += '<th data-sort-col="' + col + '" style="' + style + '" data-col-width="auto">';
+                            html += '<div style="display:flex;justify-content:space-between;align-items:center;padding-right:5px;">';
+                            html += '<span style="flex:1;">' + col + '</span>';
+                            html += '<span style="font-size:10px;">' + arrow + '</span>';
+                            html += '</div>';
+                            html += '<div class="column-resizer" style="position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;"></div>';
+                            html += '</th>';
                         });
                         html += '</tr></thead><tbody>';
                         rows.forEach(function(row, idx) {
@@ -42,7 +106,7 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
                                 var val = row[col], isNull = (val === null || val === undefined);
                                 var display = isNull ? '<span style="color:#ccc;">NULL</span>' : val;
                                 var raw = isNull ? '' : String(val).replace(/"/g, '&quot;');
-                                html += '<td data-col="' + col + '" data-val="' + raw + '" data-null="' + isNull + '" style="white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis;">' + display + '</td>';
+                                html += '<td data-col="' + col + '" data-val="' + raw + '" data-null="' + isNull + '" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;">' + display + '</td>';
                             });
                             html += '</tr>';
                         });
@@ -51,6 +115,7 @@ function loadTableData(title, dbName, tableName, page, pageSize) {
                         _dataCtx.rows = rows;
                         bindDataRowEdit();
                         bindDataSortHeaders();
+                        bindColumnResizer(); // 绑定列宽调整功能
                         if (typeof updateExportBtn === 'function') updateExportBtn();
                         layui.laypage.render({ elem: 'dataPagerBox', count: total, curr: page, limit: pageSize, limits: [50, 100, 200, 500], layout: ['count', 'prev', 'page', 'next', 'limit', 'skip'],
                             jump: function(obj, first) { if (!first) loadTableData(title, dbName, tableName, obj.curr, obj.limit); }
@@ -100,10 +165,15 @@ function bindDataRowEdit() {
     var editingRow = null;
     $tbody.on('click', 'td', function(e) {
         var $td = $(this), $row = $td.closest('tr');
-        $tbody.find('td').removeClass('cell-highlight');
         $tbody.find('tr').removeClass('row-highlight');
-        if (!$td.data('col')) { $row.addClass('row-highlight'); var range = document.createRange(); range.selectNodeContents($row[0]); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
-        else { $td.addClass('cell-highlight'); var range = document.createRange(); range.selectNodeContents($td[0]); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+        $row.addClass('row-highlight');
+        
+        // 创建文本选择范围
+        var range = document.createRange();
+        range.selectNodeContents($row[0]);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
     });
     $tbody.on('dblclick', 'tr', function() {
         var $row = $(this);
@@ -196,7 +266,12 @@ function bindDataContextMenu($tbody) {
     }
     $tbody.on('contextmenu', 'td', function(e) {
         e.preventDefault();
-        window._ctxTarget = { $td: $(this), $row: $(this).closest('tr'), rowIdx: $(this).closest('tr').data('row-idx') };
+        var $td = $(this), $row = $td.closest('tr');
+        // 高亮选中的行
+        $tbody.find('tr').removeClass('row-highlight');
+        $row.addClass('row-highlight');
+        
+        window._ctxTarget = { $td: $td, $row: $row, rowIdx: $row.data('row-idx') };
         $('#dataContextMenu').css({ left: e.clientX, top: e.clientY }).show();
     });
 }
@@ -297,5 +372,159 @@ function saveNewRow($row) {
             else { layer.msg('插入失败: ' + (r.msg || '')); }
         },
         error: function() { layer.msg('请求失败'); }
+    });
+}
+// ========== 列宽调整功能 ==========
+function bindColumnResizer() {
+    var $table = $('#dataView .data-edit-table');
+    var $thead = $table.find('thead');
+    var $tbody = $table.find('tbody');
+    var $resizers = $thead.find('.column-resizer');
+    var isResizing = false;
+    var startX, startWidth, columnIndex, $columnHeader, $columnCells;
+
+    // 保存列宽到 localStorage
+    function saveColumnWidths(title, dbName, tableName) {
+        var widths = {};
+        $thead.find('th').each(function(index) {
+            if (index > 0) { // 跳过序号列
+                var colName = $(this).data('sort-col');
+                if (colName) {
+                    widths[colName] = $(this).width();
+                }
+            }
+        });
+        var key = 'webdb_column_widths_' + title + '_' + dbName + '_' + tableName;
+        localStorage.setItem(key, JSON.stringify(widths));
+    }
+
+    // 加载保存的列宽
+    function loadColumnWidths(title, dbName, tableName) {
+        var key = 'webdb_column_widths_' + title + '_' + dbName + '_' + tableName;
+        var saved = localStorage.getItem(key);
+        if (saved) {
+            try {
+                var widths = JSON.parse(saved);
+                $thead.find('th').each(function(index) {
+                    if (index > 0) { // 跳过序号列
+                        var colName = $(this).data('sort-col');
+                        if (colName && widths[colName]) {
+                            var width = Math.max(widths[colName], 50); // 最小宽度50px
+                            $(this).width(width);
+                            $tbody.find('td:nth-child(' + (index + 1) + ')').width(width);
+                        }
+                    }
+                });
+                $table.css('table-layout', 'fixed');
+            } catch (e) {
+                // 忽略解析错误
+            }
+        }
+    }
+
+    // 加载已保存的列宽
+    if (_dataCtx.title && _dataCtx.dbName && _dataCtx.tableName) {
+        loadColumnWidths(_dataCtx.title, _dataCtx.dbName, _dataCtx.tableName);
+    }
+
+    $resizers.each(function(index) {
+        var $resizer = $(this);
+        $resizer.on('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isResizing = true;
+            startX = e.pageX;
+            columnIndex = index + 1; // +1 因为序号列
+            $columnHeader = $thead.find('th:nth-child(' + (columnIndex + 1) + ')'); // +1 因为序号列
+            $columnCells = $tbody.find('td:nth-child(' + (columnIndex + 1) + ')'); // +1 因为序号列
+            startWidth = $columnHeader.width();
+            
+            // 添加视觉反馈
+            $('body').addClass('resizing-cursor');
+            $columnHeader.addClass('resizing-column');
+            $columnHeader.css('background-color', '#f0f0f0');
+            
+            // 绑定移动和释放事件
+            $(document).on('mousemove.resizer', handleMouseMove);
+            $(document).on('mouseup.resizer', handleMouseUp);
+        });
+    });
+
+    function handleMouseMove(e) {
+        if (!isResizing) return;
+        
+        e.preventDefault();
+        var deltaX = e.pageX - startX;
+        var newWidth = Math.max(startWidth + deltaX, 50); // 最小宽度50px
+        
+        // 应用新宽度
+        $columnHeader.width(newWidth);
+        $columnCells.width(newWidth);
+        
+        // 更新表格布局
+        $table.css('table-layout', 'fixed');
+    }
+
+    function handleMouseUp(e) {
+        if (!isResizing) return;
+        
+        e.preventDefault();
+        isResizing = false;
+        
+        // 移除视觉反馈
+        $('body').removeClass('resizing-cursor');
+        $columnHeader.removeClass('resizing-column');
+        $columnHeader.css('background-color', '');
+        
+        // 保存列宽
+        if (_dataCtx.title && _dataCtx.dbName && _dataCtx.tableName) {
+            saveColumnWidths(_dataCtx.title, _dataCtx.dbName, _dataCtx.tableName);
+        }
+        
+        // 移除事件绑定
+        $(document).off('mousemove.resizer');
+        $(document).off('mouseup.resizer');
+    }
+
+    // 双击列分隔线重置宽度
+    $resizers.on('dblclick', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        var $resizer = $(this);
+        var index = $resizer.parent().index();
+        var $header = $resizer.parent();
+        var $cells = $tbody.find('td:nth-child(' + (index + 1) + ')');
+        
+        // 重置为自适应宽度
+        $header.css('width', '');
+        $cells.css('width', '');
+        $table.css('table-layout', 'auto');
+        
+        // 从 localStorage 中删除保存的宽度
+        if (_dataCtx.title && _dataCtx.dbName && _dataCtx.tableName) {
+            var key = 'webdb_column_widths_' + _dataCtx.title + '_' + _dataCtx.dbName + '_' + _dataCtx.tableName;
+            var saved = localStorage.getItem(key);
+            if (saved) {
+                try {
+                    var widths = JSON.parse(saved);
+                    var colName = $header.data('sort-col');
+                    if (colName && widths[colName]) {
+                        delete widths[colName];
+                        localStorage.setItem(key, JSON.stringify(widths));
+                    }
+                } catch (e) {
+                    // 忽略错误
+                }
+            }
+        }
+    });
+
+    // 防止在调整列宽时触发排序
+    $thead.find('th').on('mousedown', function(e) {
+        if ($(e.target).hasClass('column-resizer')) {
+            e.stopPropagation();
+        }
     });
 }

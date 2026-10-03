@@ -78,6 +78,18 @@
 				</div>
 			</div>
 		</div>
+		
+		<div class="layui-form-item">
+			<div class="layui-inline ">
+				<label class="layui-form-label">测试连接</label>
+				<div class="layui-input-inline">
+					<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="testConnection()">
+						<i class="layui-icon layui-icon-link"></i> 测试连接
+					</button>
+					<span id="testResult" style="margin-left:15px;font-size:13px;"></span>
+				</div>
+			</div>
+		</div>
 		</div>
 	</form>
 
@@ -86,6 +98,7 @@
 <script type="text/javascript" src="/webdb/jquery-3.7.1.min.js"></script>
 <script>
 	var form = layui.form;
+	var layer = layui.layer;
 	var dbtype="${info.dbtype!'mysql'}";
 	form.on('select(dbType)', function(data){
 	    var elem = data.elem; // 获得 select 原始 DOM 对象
@@ -179,6 +192,60 @@
 			});
 		});
 	};
+
+	// 测试连接函数
+	function testConnection() {
+		// 收集表单数据
+		var formData = {
+			dbtype: $('#dbtype').val() || 'mysql',
+			title: $.trim($('#title').val()) || 'test_connection_' + Date.now(),
+			host: $.trim($('#host').val()),
+			port: parseInt($.trim($('#port').val())) || 3306,
+			dbname: $.trim($('#dbname').val()),
+			uname: $.trim($('#uname').val()),
+			upass: $.trim($('#upass').val()) || '',
+			opt: $.trim($('#opt').val()) || ''
+		};
+
+		// 验证必填字段
+		if (!formData.host) {
+			layer.msg('请输入主机地址');
+			return;
+		}
+		if (!formData.port) {
+			layer.msg('请输入端口号');
+			return;
+		}
+		if (!formData.dbname) {
+			layer.msg('请输入数据库名');
+			return;
+		}
+		if (!formData.uname) {
+			layer.msg('请输入用户名');
+			return;
+		}
+
+		// 显示测试状态
+		$('#testResult').html('<span style="color:#999;"><i class="layui-icon layui-icon-loading layui-icon layui-anim layui-anim-rotate layui-anim-loop"></i> 正在测试连接...</span>');
+
+		// 发送测试请求
+		$.ajax({
+			url: '/webdb/config/test',
+			type: 'POST',
+			contentType: 'application/json',
+			data: JSON.stringify(formData),
+			success: function(result) {
+				if (result.code === 0) {
+					$('#testResult').html('<span style="color:#52c41a;"><i class="layui-icon layui-icon-ok-circle"></i> 连接成功</span>');
+				} else {
+					$('#testResult').html('<span style="color:#ff5722;"><i class="layui-icon layui-icon-close"></i> 连接失败: ' + (result.msg || '未知错误') + '</span>');
+				}
+			},
+			error: function(xhr, status, error) {
+				$('#testResult').html('<span style="color:#ff5722;"><i class="layui-icon layui-icon-close"></i> 请求失败: ' + (xhr.statusText || '网络错误') + '</span>');
+			}
+		});
+	}
 
 </script>
 
